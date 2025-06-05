@@ -35,7 +35,8 @@ def create_database_tables():
         'fids': """
             CREATE TABLE IF NOT EXISTS fids (
                 fid INTEGER PRIMARY KEY,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """,
         'casts': """
@@ -47,7 +48,10 @@ def create_database_tables():
                 author_fid INTEGER,
                 text TEXT,
                 timestamp TIMESTAMP,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                is_current BOOLEAN DEFAULT TRUE,
+                UNIQUE(fid, hash)
             )
         """,
         'reactions': """
@@ -58,7 +62,10 @@ def create_database_tables():
                 target_hash TEXT,
                 type TEXT,
                 timestamp TIMESTAMP,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                is_current BOOLEAN DEFAULT TRUE,
+                UNIQUE(fid, target_hash, type)
             )
         """,
         'verifications': """
@@ -67,7 +74,10 @@ def create_database_tables():
                 fid INTEGER REFERENCES fids(fid),
                 address TEXT,
                 timestamp TIMESTAMP,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                is_current BOOLEAN DEFAULT TRUE,
+                UNIQUE(fid, address)
             )
         """,
         'links': """
@@ -77,7 +87,10 @@ def create_database_tables():
                 target_fid INTEGER,
                 type TEXT,
                 timestamp TIMESTAMP,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                is_current BOOLEAN DEFAULT TRUE,
+                UNIQUE(fid, target_fid, type)
             )
         """,
         'user_data': """
@@ -87,7 +100,10 @@ def create_database_tables():
                 type TEXT,
                 value TEXT,
                 timestamp TIMESTAMP,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                is_current BOOLEAN DEFAULT TRUE,
+                UNIQUE(fid, type)
             )
         """
     }
@@ -108,35 +124,44 @@ def fetch_all_fids():
         if len(all_fids) >= 100:  # Stop if we have 100 FIDs
             break
             
-        try:
-            url = f"{PINATA_API_URL}/fids"
-            params = {
-                'pageSize': 100,  # Reduced page size
-                'shard_id': shard_id
-            }
-            
-            response = requests.get(url, headers=HEADERS, params=params)
-            response.raise_for_status()
-            
-            data = response.json()
-            new_fids = data.get('fids', [])
-            if not new_fids:
-                break
+        print(f"\nFetching FIDs from shard {shard_id}...")
+        params = {
+            'pageSize': 100,  # Keep page size small to avoid unnecessary data transfer
+            'shard_id': shard_id
+        }
+        
+        while len(all_fids) < 100:  # Continue until we have 100 FIDs
+            try:
+                url = f"{PINATA_API_URL}/fids"
+                response = requests.get(url, headers=HEADERS, params=params)
+                response.raise_for_status()
                 
-            # Only take as many FIDs as needed to reach 100
-            remaining_slots = 100 - len(all_fids)
-            all_fids.extend(new_fids[:remaining_slots])
-            print(f"Fetched {len(new_fids[:remaining_slots])} FIDs from shard {shard_id}")
-            
-            if len(all_fids) >= 100:
-                break
+                data = response.json()
+                new_fids = data.get('fids', [])
+                if not new_fids:
+                    break
+                    
+                # Only take as many FIDs as needed to reach 100
+                remaining_slots = 100 - len(all_fids)
+                all_fids.extend(new_fids[:remaining_slots])
+                print(f"Fetched {len(new_fids[:remaining_slots])} FIDs from shard {shard_id}, total: {len(all_fids)}")
                 
-        except requests.exceptions.RequestException as e:
-            print(f"Error fetching FIDs from shard {shard_id}: {str(e)}")
-            break
-        except Exception as e:
-            print(f"Unexpected error while fetching FIDs from shard {shard_id}: {str(e)}")
-            break
+                if len(all_fids) >= 100:
+                    break
+                    
+                # Check for next page
+                next_page_token = data.get('nextPageToken')
+                if not next_page_token:
+                    break
+                    
+                params['pageToken'] = next_page_token
+                
+            except requests.exceptions.RequestException as e:
+                print(f"Error fetching FIDs from shard {shard_id}: {str(e)}")
+                break
+            except Exception as e:
+                print(f"Unexpected error while fetching FIDs from shard {shard_id}: {str(e)}")
+                break
     
     print(f"Total FIDs collected: {len(all_fids)}")
     return all_fids
@@ -187,9 +212,21 @@ def fetch_and_store_casts(cur, fid):
             try:
                 #print(cast.get('data'))
                 cur.execute("""
-                    INSERT INTO casts (fid, hash, parent_hash, author_fid, text, timestamp)
-                    VALUES (%s, %s, %s, %s, %s, %s)
-                    ON CONFLICT DO NOTHING
+                    INSERT INTO casts (fid, hash, parent_hash, author_fid, text, timestamp, created_at, updated_at, is_current)
+                    VALUES (%s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, TRUE)
+                    ON CONFLICT (fid, hash) DO UPDATE 
+                    SET 
+                        parent_hash = EXCLUDED.parent_hash,
+                        author_fid = EXCLUDED.author_fid,
+                        text = EXCLUDED.text,
+                        timestamp = EXCLUDED.timestamp,
+                        updated_at = CURRENT_TIMESTAMP,
+                        is_current = TRUE
+                    WHERE 
+                        casts.parent_hash IS DISTINCT FROM EXCLUDED.parent_hash OR
+                        casts.author_fid IS DISTINCT FROM EXCLUDED.author_fid OR
+                        casts.text IS DISTINCT FROM EXCLUDED.text OR
+                        casts.timestamp IS DISTINCT FROM EXCLUDED.timestamp
                 """, (
                     fid,
                     cast.get('data', {}).get('hash'),
