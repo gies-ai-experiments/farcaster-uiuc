@@ -2,60 +2,119 @@ name: Deploy Farcaster Data Collector
 
 on:
   push:
-    branches: [ main ]
-  pull_request:
-    branches: [ main ]
+    branches:
+      - main
 
 jobs:
-  test:
-    runs-on: ubuntu-latest
-    steps:
-    - uses: actions/checkout@v2
-    
-    - name: Set up Python
-      uses: actions/setup-python@v2
-      with:
-        python-version: '3.8'
-    
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install -r requirements.txt
-
-
   deploy:
+    name: Deploy to VM
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main'
-    
+
     steps:
-    - uses: actions/checkout@v2
-    
-    - name: Set up Docker Buildx
-      uses: docker/setup-buildx-action@v1
-    
-    - name: Login to DockerHub
-      uses: docker/login-action@v1
-      with:
-        username: ${{ secrets.DOCKERHUB_USERNAME }}
-        password: ${{ secrets.DOCKERHUB_TOKEN }}
-    
-    - name: Build and push Docker image
-      uses: docker/build-push-action@v2
-      with:
-        context: .
-        push: true
-        tags: ${{ secrets.DOCKERHUB_USERNAME }}/farcaster-collector:latest
-    
-    - name: Deploy to server
-      uses: appleboy/ssh-action@master
-      with:
-        host: ${{ secrets.SERVER_HOST }}
-        username: ${{ secrets.SERVER_USERNAME }}
-        key: ${{ secrets.SERVER_SSH_KEY }}
-        script: |
-          cd /opt/farcaster-collector
-          echo "DB_NAME=${{ secrets.DB_NAME }}" > .env
-          echo "DB_USER=${{ secrets.DB_USER }}" >> .env
-          echo "DB_PASSWORD=${{ secrets.DB_PASSWORD }}" >> .env
-          docker-compose pull
-          docker-compose up -d 
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Deploy to VM via SSH
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.VM_HOST }}
+          username: ${{ secrets.VM_USERNAME }}
+          key: ${{ secrets.VM_SSH_KEY }}
+          port: 22
+          script: |
+            # Define variables for paths and names on the VM
+            PROJECT_DIR="/opt/farcaster-collector"
+            IMAGE_NAME="farcaster-collector"
+            CONTAINER_NAME="farcaster-collector-app"
+            DB_CONTAINER_NAME="farcaster-db"
+
+            echo "--- Checking for Docker installation ---"
+            if ! command -v docker &> /dev/null
+            then
+                echo "Docker could not be found on the VM. Please install Docker and try again."
+                exit 1
+            fi
+            if ! docker ps &> /dev/null
+            then
+                echo "Docker daemon is not running or user cannot access it. Please check Docker setup on the VM."
+                exit 1
+            fi
+            echo "Docker is available and running."
+
+            echo "--- Checking for Docker Compose ---"
+            if ! command -v docker-compose &> /dev/null
+            then
+                echo "Docker Compose could not be found on the VM. Please install Docker Compose and try again."
+                exit 1
+            fi
+            echo "Docker Compose is available."
+
+            echo "--- Navigating to project directory: $PROJECT_DIR ---"
+            # Create directory if it doesn't exist
+            mkdir -p "$PROJECT_DIR"
+            cd "$PROJECT_DIR" || { echo "Failed to navigate to project directory. Exiting."; exit 1; }
+
+            echo "--- Initializing Git repo or ensuring it exists ---"
+            if [ ! -d ".git" ]; then
+              echo "Cloning repository into $PROJECT_DIR..."
+              git clone "https://github.com/${{ github.repository }}.git" .
+            else
+              current_remote_url=$(git config --get remote.origin.url)
+              expected_remote_url="https://github.com/${{ github.repository }}.git"
+              if [ "$current_remote_url" != "$expected_remote_url" ]; then
+                git remote set-url origin "$expected_remote_url" || git remote add origin "$expected_remote_url"
+              fi
+            fi
+
+            # Get the branch name from GitHub context
+            CURRENT_BRANCH="${{ github.ref_name }}"
+            echo "--- Preparing to deploy branch: $CURRENT_BRANCH ---"
+
+            # Fetch all updates from the remote origin
+            echo "Fetching all remote branches and tags..."
+            git fetch origin --prune
+
+            # Ensure the target branch exists locally and is up-to-date
+            echo "Checking out branch $CURRENT_BRANCH..."
+            git checkout "$CURRENT_BRANCH"
+            
+            echo "Resetting $CURRENT_BRANCH to origin/$CURRENT_BRANCH..."
+            git reset --hard "origin/$CURRENT_BRANCH"
+
+            echo "--- Creating/Updating .env file on VM ---"
+            {
+              echo "DB_NAME=${{ secrets.DB_NAME }}"
+              echo "DB_USER=${{ secrets.DB_USER }}"
+              echo "DB_PASSWORD=${{ secrets.DB_PASSWORD }}"
+              echo "DB_HOST=db"
+              echo "DB_PORT=5432"
+            } > .env
+
+            echo "--- Verifying Dockerfile and docker-compose.yml exist ---"
+            if [ ! -f Dockerfile ] || [ ! -f docker-compose.yml ]; then
+                echo "Dockerfile or docker-compose.yml not found in $PROJECT_DIR! Listing files:"
+                ls -la
+                exit 1
+            fi
+            echo "Required files found."
+
+            echo "--- Stopping and removing old containers ---"
+            docker-compose down || true
+
+            echo "--- Building and starting new containers ---"
+            docker-compose up -d --build
+
+            echo "--- Verifying container startup ---"
+            sleep 15 # Wait for containers to initialize
+
+            # Check if the containers are running
+            if docker ps --filter "name=${CONTAINER_NAME}" --filter "status=running" --format "{{.Names}}" | grep -q "${CONTAINER_NAME}" && \
+               docker ps --filter "name=${DB_CONTAINER_NAME}" --filter "status=running" --format "{{.Names}}" | grep -q "${DB_CONTAINER_NAME}"; then
+                echo "Containers started successfully and are running."
+                echo "--- Deployment completed successfully! ---"
+            else
+                echo "Error: One or more containers did not start correctly."
+                echo "Recent logs for containers:"
+                docker-compose logs --tail 50
+                exit 1
+            fi 
