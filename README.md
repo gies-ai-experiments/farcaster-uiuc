@@ -78,3 +78,58 @@ You can also query the database directly using the PostgreSQL command-line tool 
    ```sql
    \q
    ```
+
+## Deployment
+
+### Local Deployment with Docker
+
+1. Build and start the containers:
+   ```bash
+   docker-compose up -d
+   ```
+
+2. View logs:
+   ```bash
+   docker-compose logs -f
+   ```
+
+3. Stop the containers:
+   ```bash
+   docker-compose down
+   ```
+
+### Production Deployment
+
+The project uses GitHub Actions for CI/CD. To deploy to production:
+
+1. Set up the following secrets in your GitHub repository:
+   - `DOCKERHUB_USERNAME`: Your DockerHub username
+   - `DOCKERHUB_TOKEN`: Your DockerHub access token
+   - `SERVER_HOST`: Your server's hostname or IP
+   - `SERVER_USERNAME`: SSH username for the server
+   - `SERVER_SSH_KEY`: SSH private key for server access
+   - `DB_NAME`: Database name
+   - `DB_USER`: Database user
+   - `DB_PASSWORD`: Database password
+
+2. Push to the main branch to trigger deployment:
+   ```bash
+   git push origin main
+   ```
+
+The GitHub Actions workflow will:
+1. Run tests
+2. Build and push the Docker image
+3. Deploy to your server using SSH
+4. Set up the environment and start the containers
+
+### Server Setup
+
+1. Install Docker and Docker Compose on your server
+2. Create the deployment directory:
+   ```bash
+   mkdir -p /opt/farcaster-collector
+   ```
+
+3. Copy the docker-compose.yml file to the server
+4. The GitHub Actions workflow will handle the rest of the setup
