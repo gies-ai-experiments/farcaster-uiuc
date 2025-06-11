@@ -147,13 +147,22 @@ jobs:
             sleep 15 # Wait for containers to initialize
 
             # Check if the containers are running
-            if docker ps --filter "name=${CONTAINER_NAME}" --filter "status=running" --format "{{.Names}}" | grep -q "${CONTAINER_NAME}" && \
-               docker ps --filter "name=${DB_CONTAINER_NAME}" --filter "status=running" --format "{{.Names}}" | grep -q "${DB_CONTAINER_NAME}"; then
-                echo "Containers started successfully and are running."
-                echo "--- Deployment completed successfully! ---"
+            if docker ps --filter "name=${DB_CONTAINER_NAME}" --filter "status=running" --format "{{.Names}}" | grep -q "${DB_CONTAINER_NAME}"; then
+                echo "Database container is running."
+                
+                # Check if the application container is running
+                if docker ps --filter "name=${CONTAINER_NAME}" --filter "status=running" --format "{{.Names}}" | grep -q "${CONTAINER_NAME}"; then
+                    echo "Application container is running."
+                    echo "--- Deployment completed successfully! ---"
+                else
+                    echo "Error: Application container did not start correctly."
+                    echo "Recent logs for application container:"
+                    docker compose logs --tail 50 ${CONTAINER_NAME}
+                    exit 1
+                fi
             else
-                echo "Error: One or more containers did not start correctly."
-                echo "Recent logs for containers:"
-                docker compose logs --tail 50
+                echo "Error: Database container did not start correctly."
+                echo "Recent logs for database container:"
+                docker compose logs --tail 50 ${DB_CONTAINER_NAME}
                 exit 1
             fi 
