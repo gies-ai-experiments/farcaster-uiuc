@@ -84,10 +84,10 @@ jobs:
             echo "--- Initializing Git repo or ensuring it exists ---"
             if [ ! -d ".git" ]; then
               echo "Cloning repository into $PROJECT_DIR..."
-              git clone "https://github.com/gies-ai-experiments/farcaster-uiuc.git" . # Clone into current dir
+              git clone "https://github.com/${{ github.repository }}.git" . # Clone into current dir
             else
               current_remote_url=$(git config --get remote.origin.url)
-              expected_remote_url="https://github.com/gies-ai-experiments/farcaster-uiuc.git"
+              expected_remote_url="https://github.com/${{ github.repository }}.git"
               if [ "$current_remote_url" != "$expected_remote_url" ]; then
                 git remote set-url origin "$expected_remote_url" || git remote add origin "$expected_remote_url"
               fi
