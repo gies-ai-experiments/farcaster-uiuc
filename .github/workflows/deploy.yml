@@ -3,7 +3,7 @@ name: Deploy Farcaster Data Collector
 on:
   push:
     branches:
-      - main
+      - feature/data-collector
 
 jobs:
   deploy:
