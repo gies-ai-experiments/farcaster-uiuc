@@ -5,6 +5,9 @@ on:
     branches:
       - feature/data-collector
 
+permissions:
+  contents: read
+
 jobs:
   deploy:
     name: Deploy to VM
@@ -13,6 +16,15 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Debug repository info
+        run: |
+          echo "Repository: ${{ github.repository }}"
+          echo "Ref: ${{ github.ref }}"
+          echo "Ref name: ${{ github.ref_name }}"
+          echo "SHA: ${{ github.sha }}"
 
       - name: Deploy to VM via SSH
         uses: appleboy/ssh-action@master
@@ -58,7 +70,7 @@ jobs:
             echo "--- Initializing Git repo or ensuring it exists ---"
             if [ ! -d ".git" ]; then
               echo "Cloning repository into $PROJECT_DIR..."
-              git clone "https://github.com/${{ github.repository }}.git" .
+              git clone --branch "${{ github.ref_name }}" "https://github.com/${{ github.repository }}.git" .
             else
               current_remote_url=$(git config --get remote.origin.url)
               expected_remote_url="https://github.com/${{ github.repository }}.git"
@@ -82,6 +94,11 @@ jobs:
             echo "Resetting $CURRENT_BRANCH to origin/$CURRENT_BRANCH..."
             git reset --hard "origin/$CURRENT_BRANCH"
 
+            echo "--- Verifying repository contents ---"
+            ls -la
+            echo "--- Git status ---"
+            git status
+
             echo "--- Creating/Updating .env file on VM ---"
             {
               echo "DB_NAME=${{ secrets.DB_NAME }}"
@@ -92,6 +109,7 @@ jobs:
             } > .env
 
             echo "--- Verifying Dockerfile and docker-compose.yml exist ---"
+            ls -la
             if [ ! -f Dockerfile ] || [ ! -f docker-compose.yml ]; then
                 echo "Dockerfile or docker-compose.yml not found in $PROJECT_DIR! Listing files:"
                 ls -la
