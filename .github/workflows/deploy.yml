@@ -70,16 +70,17 @@ jobs:
             echo "--- Cleaning up existing directory ---"
             # Remove all files except .env if it exists
             if [ -f .env ]; then
-                mv .env ../.env.backup
+                sudo mv .env ../.env.backup
             fi
-            rm -rf ./* ./.* 2>/dev/null || true
+            sudo rm -rf ./* ./.* 2>/dev/null || true
             if [ -f ../.env.backup ]; then
-                mv ../.env.backup .env
+                sudo mv ../.env.backup .env
+                sudo chown ${{ secrets.VM_USERNAME }}:${{ secrets.VM_USERNAME }} .env
             fi
 
             echo "--- Initializing Git repo ---"
             echo "Cloning repository into $PROJECT_DIR..."
-            git clone --branch "${{ github.ref_name }}" "https://github.com/${{ github.repository }}.git" .
+            git clone --branch "${{ github.ref_name }}" "https://github.com/gies-ai-experiments/farcaster-uiuc.git" .
 
             # Get the branch name from GitHub context
             CURRENT_BRANCH="${{ github.ref_name }}"
