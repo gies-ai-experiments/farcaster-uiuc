@@ -42,7 +42,7 @@ jobs:
             echo "Docker is available and running."
 
             echo "--- Checking for Docker Compose ---"
-            if ! command -v docker-compose &> /dev/null
+            if ! docker compose version &> /dev/null
             then
                 echo "Docker Compose could not be found on the VM. Please install Docker Compose and try again."
                 exit 1
@@ -99,10 +99,10 @@ jobs:
             echo "Required files found."
 
             echo "--- Stopping and removing old containers ---"
-            docker-compose down || true
+            docker compose down || true
 
             echo "--- Building and starting new containers ---"
-            docker-compose up -d --build
+            docker compose up -d --build
 
             echo "--- Verifying container startup ---"
             sleep 15 # Wait for containers to initialize
@@ -115,6 +115,6 @@ jobs:
             else
                 echo "Error: One or more containers did not start correctly."
                 echo "Recent logs for containers:"
-                docker-compose logs --tail 50
+                docker compose logs --tail 50
                 exit 1
             fi 
