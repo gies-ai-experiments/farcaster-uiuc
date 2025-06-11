@@ -110,6 +110,9 @@ jobs:
 
             echo "--- Creating/Updating .env file on VM ---"
             {
+              echo "POSTGRES_DB=${{ secrets.DB_NAME }}"
+              echo "POSTGRES_USER=${{ secrets.DB_USER }}"
+              echo "POSTGRES_PASSWORD=${{ secrets.DB_PASSWORD }}"
               echo "DB_NAME=${{ secrets.DB_NAME }}"
               echo "DB_USER=${{ secrets.DB_USER }}"
               echo "DB_PASSWORD=${{ secrets.DB_PASSWORD }}"
@@ -129,14 +132,15 @@ jobs:
             docker compose down || true
 
             echo "--- Building and starting new containers ---"
-            # Export environment variables for docker-compose
-            export DB_NAME="${{ secrets.DB_NAME }}"
-            export DB_USER="${{ secrets.DB_USER }}"
-            export DB_PASSWORD="${{ secrets.DB_PASSWORD }}"
-            export DB_HOST="db"
-            export DB_PORT="5432"
-
             # Start containers with environment variables
+            POSTGRES_DB="${{ secrets.DB_NAME }}" \
+            POSTGRES_USER="${{ secrets.DB_USER }}" \
+            POSTGRES_PASSWORD="${{ secrets.DB_PASSWORD }}" \
+            DB_NAME="${{ secrets.DB_NAME }}" \
+            DB_USER="${{ secrets.DB_USER }}" \
+            DB_PASSWORD="${{ secrets.DB_PASSWORD }}" \
+            DB_HOST="db" \
+            DB_PORT="5432" \
             docker compose up -d --build
 
             echo "--- Verifying container startup ---"
