@@ -42,8 +42,8 @@ jobs:
             # Define variables for paths and names on the VM
             PROJECT_DIR="/opt/farcaster-collector"
             IMAGE_NAME="farcaster-collector"
-            CONTAINER_NAME="farcaster-collector-app"
-            DB_CONTAINER_NAME="farcaster-db"
+            CONTAINER_NAME="farcaster-collector"
+            DB_CONTAINER_NAME="db"
 
             echo "--- Checking for Docker installation ---"
             if ! command -v docker &> /dev/null
