@@ -5,6 +5,11 @@ on:
     branches:
       - feature/data-collector
 
+# Note: Using PAT instead of GITHUB_TOKEN because:
+# 1. This is an external repository (gies-ai-experiments/farcaster-uiuc)
+# 2. PAT provides explicit control over repository access
+# 3. PAT can be revoked or rotated if needed
+# 4. PAT can be scoped to specific repositories
 permissions:
   contents: read
 
@@ -62,26 +67,21 @@ jobs:
             echo "Docker Compose is available."
 
             echo "--- Navigating to project directory: $PROJECT_DIR ---"
-            # Create directory if it doesn't exist with proper permissions
-            sudo mkdir -p "$PROJECT_DIR"
-            sudo chown ${{ secrets.VM_USERNAME }}:${{ secrets.VM_USERNAME }} "$PROJECT_DIR"
+            # Create directory if it doesn't exist (for first-time deployment)
+            mkdir -p "$PROJECT_DIR"
             cd "$PROJECT_DIR" || { echo "Failed to navigate to project directory. Exiting."; exit 1; }
 
-            echo "--- Cleaning up existing directory ---"
-            echo "Current directory contents before cleanup:"
-            ls -la
-
-            # Remove all files and directories including .env
-            echo "Removing all files and directories..."
-            sudo rm -rf ./* ./.* 2>/dev/null || true
-
-            # Verify cleanup
-            echo "Directory contents after cleanup:"
-            ls -la
-
-            echo "--- Initializing Git repo ---"
-            echo "Cloning repository into $PROJECT_DIR..."
-            git clone --branch "${{ github.ref_name }}" "https://github.com/gies-ai-experiments/farcaster-uiuc.git" .
+            echo "--- Initializing Git repo or ensuring it exists ---"
+            if [ ! -d ".git" ]; then
+              echo "Cloning repository into $PROJECT_DIR..."
+              git clone "https://github.com/gies-ai-experiments/farcaster-uiuc.git" . # Clone into current dir
+            else
+              current_remote_url=$(git config --get remote.origin.url)
+              expected_remote_url="https://github.com/gies-ai-experiments/farcaster-uiuc.git"
+              if [ "$current_remote_url" != "$expected_remote_url" ]; then
+                git remote set-url origin "$expected_remote_url" || git remote add origin "$expected_remote_url"
+              fi
+            fi
 
             # Get the branch name from GitHub context
             CURRENT_BRANCH="${{ github.ref_name }}"
@@ -97,6 +97,7 @@ jobs:
             
             echo "Resetting $CURRENT_BRANCH to origin/$CURRENT_BRANCH..."
             git reset --hard "origin/$CURRENT_BRANCH"
+            ls -lart
 
             echo "--- Verifying repository contents ---"
             ls -la
