@@ -67,17 +67,19 @@ jobs:
             sudo chown ${{ secrets.VM_USERNAME }}:${{ secrets.VM_USERNAME }} "$PROJECT_DIR"
             cd "$PROJECT_DIR" || { echo "Failed to navigate to project directory. Exiting."; exit 1; }
 
-            echo "--- Initializing Git repo or ensuring it exists ---"
-            if [ ! -d ".git" ]; then
-              echo "Cloning repository into $PROJECT_DIR..."
-              git clone --branch "${{ github.ref_name }}" "https://github.com/${{ github.repository }}.git" .
-            else
-              current_remote_url=$(git config --get remote.origin.url)
-              expected_remote_url="https://github.com/${{ github.repository }}.git"
-              if [ "$current_remote_url" != "$expected_remote_url" ]; then
-                git remote set-url origin "$expected_remote_url" || git remote add origin "$expected_remote_url"
-              fi
+            echo "--- Cleaning up existing directory ---"
+            # Remove all files except .env if it exists
+            if [ -f .env ]; then
+                mv .env ../.env.backup
             fi
+            rm -rf ./* ./.* 2>/dev/null || true
+            if [ -f ../.env.backup ]; then
+                mv ../.env.backup .env
+            fi
+
+            echo "--- Initializing Git repo ---"
+            echo "Cloning repository into $PROJECT_DIR..."
+            git clone --branch "${{ github.ref_name }}" "https://github.com/${{ github.repository }}.git" .
 
             # Get the branch name from GitHub context
             CURRENT_BRANCH="${{ github.ref_name }}"
