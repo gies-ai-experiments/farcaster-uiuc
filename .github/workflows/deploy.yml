@@ -124,7 +124,6 @@ jobs:
             } > .env
 
             echo "--- Verifying Dockerfile and docker-compose.yml exist ---"
-            ls -la
             if [ ! -f Dockerfile ] || [ ! -f docker-compose.yml ]; then
                 echo "Dockerfile or docker-compose.yml not found in $PROJECT_DIR! Listing files:"
                 ls -la
@@ -136,6 +135,14 @@ jobs:
             docker compose down || true
 
             echo "--- Building and starting new containers ---"
+            # Export environment variables for docker-compose
+            export DB_NAME="${{ secrets.DB_NAME }}"
+            export DB_USER="${{ secrets.DB_USER }}"
+            export DB_PASSWORD="${{ secrets.DB_PASSWORD }}"
+            export DB_HOST="db"
+            export DB_PORT="5432"
+
+            # Start containers with environment variables
             docker compose up -d --build
 
             echo "--- Verifying container startup ---"
