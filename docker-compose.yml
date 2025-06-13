@@ -1,36 +1,200 @@
-version: '3.8'
+# /mnt: non-persistent data
+# /datadrive: persistent data
+# docker volumes are located in /mnt
+
+version: '3.9'
 
 services:
-  db:
-    image: postgres:13
+  snapchain:
+    image: farcasterxyz/snapchain:latest
+    pull_policy: always
+    restart: unless-stopped
+    init: true
+    environment:
+      RUST_BACKTRACE: "full"
+    entrypoint:
+      - "/bin/bash"
+      - "-c"
+      - |
+        #!/bin/bash
+        cat > config.toml <<EOF
+        network = "mainnet"
+        
+        [gossip]
+        bind_address = "0.0.0.0:3382"
+        
+        [http]
+        bind_address = "0.0.0.0:3381"
+        cors_origins = ["*"]
+        
+        [grpc]
+        bind_address = "0.0.0.0:3383"
+        
+        [metrics]
+        bind_address = "0.0.0.0:9090"
+        
+        [storage]
+        data_dir = "/data"
+        
+        [p2p]
+        listen_address = "0.0.0.0:3382"
+        EOF
+        
+        exec /usr/local/bin/snapchain start
+    ports:
+      - 3381:3381  # HTTP API
+      - 3382:3382  # Gossip/P2P port
+      - 3383:3383  # GRPC API
+      - 9090:9090  # Metrics
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - /datadrive/snapchain-data:/data
+    networks:
+      - my-network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "1g"
+        max-file: "2"
+
+  caddy:
+    image: caddy:latest
+    restart: unless-stopped
+    environment:
+      - WEB_HOST_URL
+    ports:
+      - '80:80'       # Needed for ACME TLS certificate
+      - '443:443'     # Needed for ACME TLS certificate
+      - '443:443/udp' # Needed for ACME TLS certificate
+      - '3381:3381'   # Snapchain HTTP API
+      - '3383:3383'   # Snapchain GRPC API
+      - '3000:3000'   # Grafana dashboard
+      - '5000:5000'   # Redash
+      - '9000:9000'   # Replicator web UI
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile
+      - caddy-data:/data
+      - caddy-config:/config
+    networks:
+      - my-network
+
+  replicator:
+    image: farcasterxyz/replicator:latest
+    restart: unless-stopped
+    init: true
+    command: ["sh", "-c", "sleep 30 && node build/app.js start"]
+    environment:
+      - LOG_LEVEL
+      - HUB_HOST
+      - HUB_SSL
+      - POSTGRES_URL
+      - REDIS_URL
+      - STATSD_HOST
+      - COLORIZE
+      - WEB_UI_PORT
+      - CONCURRENCY
+      - PARTITIONS
+    volumes:
+      - replicator-node_modules:/home/node/app/node_modules
+    depends_on:
+      - snapchain
+      - postgres
+      - redis
+    networks:
+      - my-network
+
+  postgres:
+    image: postgres:13
+    restart: unless-stopped
+    ports:
+      - '5432:5432'
     environment:
       - POSTGRES_DB=${DB_NAME}
       - POSTGRES_USER=${DB_USER}
       - POSTGRES_PASSWORD=${DB_PASSWORD}
-    ports:
-      - "5432:5432"
+    volumes:
+      - /mnt/point/postgres-data:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
       interval: 10s
       timeout: 5s
       retries: 5
+    networks:
+      - farcaster-network
+      - my-network
 
-  farcaster-collector:
-    build: .
-    depends_on:
-      db:
-        condition: service_healthy
-    environment:
-      - DB_NAME=${DB_NAME}
-      - DB_USER=${DB_USER}
-      - DB_PASSWORD=${DB_PASSWORD}
-      - DB_HOST=db
-      - DB_PORT=5432
+  chatapp:
+    image: chatapp:latest
+    build:
+      context: ./
+      dockerfile: Dockerfile.pandas-ai
     volumes:
-      - ./data:/data
+      - ./chatapp.py:/app/chatapp.py
+    ports:
+      - 8501:8501
+    networks:
+      - my-network
+
+  redis:
+    image: redis:7.2-alpine
     restart: unless-stopped
+    command: --save "" --loglevel warning --maxmemory-policy noeviction
+    volumes:
+      - /mnt/point/redis-data:/data
+    ports:
+      - '6379:6379'
+    healthcheck:
+      test: [ 'CMD-SHELL', 'redis-cli', 'ping' ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - farcaster-network
+      - my-network
+
+  statsd:
+    image: graphiteapp/graphite-statsd:1.1.10-5
+    restart: unless-stopped
+    ports:
+      - '8125:8125/udp' # StatsD
+      - '8126:8126' # StatsD admin
+    networks:
+      - my-network
+
+  grafana:
+    image: grafana/grafana:10.0.3
+    restart: unless-stopped
+    user: "0"
+    volumes:
+      - ./grafana/grafana.ini:/etc/grafana/grafana.ini
+      - grafana-data:/var/lib/grafana  # Persistent Grafana data
+    networks:
+      - my-network
+
+  redash:
+    image: redash/redash:latest
+    depends_on:
+      - postgres
+    ports:
+      - "5000:5000"
+    environment:
+      REDASH_DATABASE_URL: "postgresql://${DB_USER}:${DB_PASSWORD}@postgres/${DB_NAME}"
+      REDASH_REDIS_URL: "redis://redis:6379/0"
+      REDASH_SECRET_KEY: "your-secret-key-here"
+      REDASH_COOKIE_SECRET: "your-cookie-secret-here"
+    volumes:
+      - /mnt/point/redash-data:/app/data
+    networks:
+      - farcaster-network
+      - my-network
 
 volumes:
-  postgres_data: 
+  hubble-rocks:
+  caddy-data:
+  caddy-config:
+  replicator-node_modules:
+  grafana-data:
+
+networks:
+  my-network:
+  farcaster-network:
+    driver: bridge 

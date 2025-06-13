@@ -3,7 +3,7 @@ name: Deploy Farcaster Data Collector
 on:
   push:
     branches:
-      - feature/data-collector
+      - farcaster
 
 # Note: Using PAT instead of GITHUB_TOKEN because:
 # 1. This is an external repository (gies-ai-experiments/farcaster-uiuc)
