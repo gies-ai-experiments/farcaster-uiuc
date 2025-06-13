@@ -2,8 +2,6 @@
 # /datadrive: persistent data
 # docker volumes are located in /mnt
 
-version: '3.9'
-
 services:
   snapchain:
     image: farcasterxyz/snapchain:latest
@@ -120,18 +118,6 @@ services:
       retries: 5
     networks:
       - farcaster-network
-      - my-network
-
-  chatapp:
-    image: chatapp:latest
-    build:
-      context: ./
-      dockerfile: Dockerfile.pandas-ai
-    volumes:
-      - ./chatapp.py:/app/chatapp.py
-    ports:
-      - 8501:8501
-    networks:
       - my-network
 
   redis:
