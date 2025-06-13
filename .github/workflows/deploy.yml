@@ -1,4 +1,4 @@
-name: Deploy Farcaster Data Collector
+name: Deploy Farcaster Snapchain
 
 on:
   push:
@@ -40,10 +40,8 @@ jobs:
           port: 22
           script: |
             # Define variables for paths and names on the VM
-            PROJECT_DIR="/opt/farcaster-collector"
-            IMAGE_NAME="farcaster-collector"
-            CONTAINER_NAME="farcaster-collector"
-            DB_CONTAINER_NAME="db"
+            PROJECT_DIR="/opt/farcaster-snapchain"
+            DATA_DIR="/datadrive/snapchain-data"
 
             echo "--- Checking for Docker installation ---"
             if ! command -v docker &> /dev/null
@@ -66,26 +64,16 @@ jobs:
             fi
             echo "Docker Compose is available."
 
-            echo "--- Navigating to project directory: $PROJECT_DIR ---"
-            # Create directory if it doesn't exist (for first-time deployment)
+            echo "--- Creating necessary directories ---"
             mkdir -p "$PROJECT_DIR"
+            mkdir -p "$DATA_DIR"
             cd "$PROJECT_DIR" || { echo "Failed to navigate to project directory. Exiting."; exit 1; }
 
             echo "--- Cleaning up directory ---"
-            # Remove everything including .git
             rm -rf ./* ./.* 2>/dev/null || true
 
-            echo "--- Initializing Git repo or ensuring it exists ---"
-            if [ ! -d ".git" ]; then
-              echo "Cloning repository into $PROJECT_DIR..."
-              git clone "https://github.com/${{ github.repository }}.git" . # Clone into current dir
-            else
-              current_remote_url=$(git config --get remote.origin.url)
-              expected_remote_url="https://github.com/${{ github.repository }}.git"
-              if [ "$current_remote_url" != "$expected_remote_url" ]; then
-                git remote set-url origin "$expected_remote_url" || git remote add origin "$expected_remote_url"
-              fi
-            fi
+            echo "--- Initializing Git repo ---"
+            git clone "https://github.com/${{ github.repository }}.git" .
 
             # Get the branch name from GitHub context
             CURRENT_BRANCH="${{ github.ref_name }}"
@@ -101,68 +89,43 @@ jobs:
             
             echo "Resetting $CURRENT_BRANCH to origin/$CURRENT_BRANCH..."
             git reset --hard "origin/$CURRENT_BRANCH"
-            ls -lart
-
-            echo "--- Verifying repository contents ---"
-            ls -la
-            echo "--- Git status ---"
-            git status
 
             echo "--- Creating/Updating .env file on VM ---"
             {
-              echo "POSTGRES_DB=${{ secrets.DB_NAME }}"
-              echo "POSTGRES_USER=${{ secrets.DB_USER }}"
-              echo "POSTGRES_PASSWORD=${{ secrets.DB_PASSWORD }}"
               echo "DB_NAME=${{ secrets.DB_NAME }}"
               echo "DB_USER=${{ secrets.DB_USER }}"
               echo "DB_PASSWORD=${{ secrets.DB_PASSWORD }}"
-              echo "DB_HOST=db"
-              echo "DB_PORT=5432"
+              echo "WEB_HOST_URL=${{ secrets.WEB_HOST_URL }}"
             } > .env
 
-            echo "--- Verifying Dockerfile and docker-compose.yml exist ---"
-            if [ ! -f Dockerfile ] || [ ! -f docker-compose.yml ]; then
-                echo "Dockerfile or docker-compose.yml not found in $PROJECT_DIR! Listing files:"
+            echo "--- Verifying docker-compose.yml exists ---"
+            if [ ! -f docker-compose.yml ]; then
+                echo "docker-compose.yml not found in $PROJECT_DIR! Listing files:"
                 ls -la
                 exit 1
             fi
             echo "Required files found."
 
-            echo "--- Stopping and removing old containers ---"
+            echo "--- Stopping existing containers ---"
             docker compose down || true
 
             echo "--- Building and starting new containers ---"
-            # Start containers with environment variables
-            POSTGRES_DB="${{ secrets.DB_NAME }}" \
-            POSTGRES_USER="${{ secrets.DB_USER }}" \
-            POSTGRES_PASSWORD="${{ secrets.DB_PASSWORD }}" \
-            DB_NAME="${{ secrets.DB_NAME }}" \
-            DB_USER="${{ secrets.DB_USER }}" \
-            DB_PASSWORD="${{ secrets.DB_PASSWORD }}" \
-            DB_HOST="db" \
-            DB_PORT="5432" \
             docker compose up -d --build
 
             echo "--- Verifying container startup ---"
-            sleep 15 # Wait for containers to initialize
+            sleep 30 # Wait for containers to initialize
 
-            # Check if the containers are running
-            if docker ps --filter "name=${DB_CONTAINER_NAME}" --filter "status=running" --format "{{.Names}}" | grep -q "${DB_CONTAINER_NAME}"; then
-                echo "Database container is running."
-                
-                # Check if the application container is running
-                if docker ps --filter "name=${CONTAINER_NAME}" --filter "status=running" --format "{{.Names}}" | grep -q "${CONTAINER_NAME}"; then
-                    echo "Application container is running."
-                    echo "--- Deployment completed successfully! ---"
+            # Check if the main services are running
+            SERVICES=("snapchain" "postgres" "replicator" "redis")
+            for service in "${SERVICES[@]}"; do
+                if docker ps --filter "name=${service}" --filter "status=running" --format "{{.Names}}" | grep -q "${service}"; then
+                    echo "${service} container is running."
                 else
-                    echo "Error: Application container did not start correctly."
-                    echo "Recent logs for application container:"
-                    docker compose logs --tail 50 ${CONTAINER_NAME}
+                    echo "Error: ${service} container did not start correctly."
+                    echo "Recent logs for ${service} container:"
+                    docker compose logs --tail 50 ${service}
                     exit 1
                 fi
-            else
-                echo "Error: Database container did not start correctly."
-                echo "Recent logs for database container:"
-                docker compose logs --tail 50 ${DB_CONTAINER_NAME}
-                exit 1
-            fi 
+            done
+
+            echo "--- Deployment completed successfully! ---" 
