@@ -108,6 +108,41 @@ jobs:
             fi
             echo "Required files found."
 
+            echo "--- Creating Caddyfile ---"
+            cat > Caddyfile << 'EOF'
+            {
+                admin off
+            }
+
+            :80 {
+                reverse_proxy snapchain:3381
+            }
+
+            :443 {
+                reverse_proxy snapchain:3381
+            }
+
+            :3381 {
+                reverse_proxy snapchain:3381
+            }
+
+            :3383 {
+                reverse_proxy snapchain:3383
+            }
+
+            :3000 {
+                reverse_proxy grafana:3000
+            }
+
+            :5000 {
+                reverse_proxy redash:5000
+            }
+
+            :9000 {
+                reverse_proxy replicator:9000
+            }
+            EOF
+
             echo "--- Stopping existing containers ---"
             docker compose down || true
 
