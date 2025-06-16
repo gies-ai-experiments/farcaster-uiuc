@@ -38,7 +38,19 @@ services:
         listen_address = "0.0.0.0:3382"
         EOF
         
-        snapchain start
+        # Try different possible paths for snapchain
+        if [ -f "/usr/local/bin/snapchain" ]; then
+            /usr/local/bin/snapchain start
+        elif [ -f "/usr/bin/snapchain" ]; then
+            /usr/bin/snapchain start
+        elif [ -f "/app/snapchain" ]; then
+            /app/snapchain start
+        else
+            echo "Error: snapchain executable not found in common locations"
+            echo "Searching for snapchain in PATH..."
+            find / -name snapchain 2>/dev/null
+            exit 1
+        fi
     ports:
       - 3382:3382   # Gossip/P2P port
       - 3383:3383   # GRPC API
