@@ -40,7 +40,7 @@ services:
         
         snapchain start
     ports:
-      - 23381:3381  # HTTP API
+      - 33381:3381  # HTTP API
       - 3382:3382   # Gossip/P2P port
       - 3383:3383   # GRPC API
       - 9090:9090   # Metrics
@@ -63,7 +63,7 @@ services:
       - '8080:80'       # HTTP
       - '8443:443'      # HTTPS
       - '8443:443/udp'  # HTTPS UDP
-      - '23381:3381'    # Snapchain HTTP API
+      - '33381:3381'    # Snapchain HTTP API
       - '3383:3383'     # Snapchain GRPC API
       - '5000:5000'     # Redash
       - '9000:9000'     # Replicator web UI
