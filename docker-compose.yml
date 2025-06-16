@@ -3,10 +3,9 @@
 # docker volumes are located in /mnt
 
 services:
-  snapchain:
+  snap_read:
     image: farcasterxyz/snapchain:latest
     pull_policy: always
-    restart: unless-stopped
     init: true
     environment:
       RUST_BACKTRACE: "full"
@@ -16,54 +15,42 @@ services:
       - |
         #!/bin/bash
         cat > config.toml <<EOF
-        network = "mainnet"
-        
+        rpc_address="0.0.0.0:3383"
+        http_address="0.0.0.0:3381"
+        rocksdb_dir=".rocks"
+        fc_network="Mainnet"
+        read_node = true
+
+        [statsd]
+        prefix="snap_read"
+        addr="127.0.0.1:8125"
+        use_tags=false
+
         [gossip]
-        bind_address = "0.0.0.0:3382"
-        
-        [http]
-        bind_address = "0.0.0.0:3381"
-        cors_origins = ["*"]
-        
-        [grpc]
-        bind_address = "0.0.0.0:3383"
-        
-        [metrics]
-        bind_address = "0.0.0.0:9090"
-        
-        [storage]
-        data_dir = "/data"
-        
-        [p2p]
-        listen_address = "0.0.0.0:3382"
+        address="/ip4/0.0.0.0/udp/3382/quic-v1"
+        bootstrap_peers = "/ip4/54.236.164.51/udp/3382/quic-v1, /ip4/54.87.204.167/udp/3382/quic-v1, /ip4/44.197.255.20/udp/3382/quic-v1, /ip4/34.195.157.114/udp/3382/quic-v1, /ip4/107.20.169.236/udp/3382/quic-v1"
+
+        [consensus]
+        validator_addresses = ["6bc2d8901443de856d2670b0c2ea12b6727132fa830f9030d3a44ac5da9b1a72", "67474a42e0c6507198b73373b0558dfc94616b976ecfdf5c45fae11e2bee7102", "81032ecefa4260e5a63424f5a4b8b18b52d717a52583b3ffe22c4a7b084911b8", "2c0f58a364b7959c85e49b5a50d14d220c16f8bd7879b0d5d3f68b32de83ecb8", "29696eb40eb900a329a8d2542edef15d552c9ba6ded7882276be1e9eca090970"]
+        shard_ids = [1,2]
+        num_shards = 2
+
+        [snapshot]
+        endpoint_url = "https://e1f9f185c6e63471dd39f96abd3413c4.r2.cloudflarestorage.com"
+        load_db_from_snapshot=true
         EOF
-        
-        # Try different possible paths for snapchain
-        if [ -f "/usr/local/bin/snapchain" ]; then
-            /usr/local/bin/snapchain start
-        elif [ -f "/usr/bin/snapchain" ]; then
-            /usr/bin/snapchain start
-        elif [ -f "/app/snapchain" ]; then
-            /app/snapchain start
-        else
-            echo "Error: snapchain executable not found in common locations"
-            echo "Searching for snapchain in PATH..."
-            find / -name snapchain 2>/dev/null
-            exit 1
-        fi
+        exec $0 $@ # Now run the original command
+    command: [ "./snapchain", "--config-path", "config.toml" ]
+    restart: always
     ports:
-      - 3382:3382   # Gossip/P2P port
-      - 3383:3383   # GRPC API
-      - 9090:9090   # Metrics
+      - "3381:3381/tcp"
+      - "3382:3382/udp"
+      - "3383:3383/tcp"
     volumes:
-      - /mnt/point/snapchain-data:/data
+      - /mnt/point/rocks:/app/.rocks
+      - /mnt/point/rocks-snapshot:/app/.rocks.snapshot
     networks:
-      - my-network
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "1g"
-        max-file: "2"
+      - snapchain
 
   caddy:
     image: caddy:latest
@@ -74,7 +61,6 @@ services:
       - '8080:80'       # HTTP
       - '8443:443'      # HTTPS
       - '8443:443/udp'  # HTTPS UDP
-      - '3383:3383'     # Snapchain GRPC API
       - '5000:5000'     # Redash
       - '9000:9000'     # Replicator web UI
     volumes:
@@ -82,7 +68,7 @@ services:
       - /mnt/point/caddy-data:/data
       - /mnt/point/caddy-config:/config
     networks:
-      - my-network
+      - snapchain
 
   replicator:
     image: farcasterxyz/replicator:latest
@@ -103,11 +89,11 @@ services:
     volumes:
       - /mnt/point/replicator-node_modules:/home/node/app/node_modules
     depends_on:
-      - snapchain
+      - snap_read
       - postgres
       - redis
     networks:
-      - my-network
+      - snapchain
 
   postgres:
     image: postgres:13
@@ -126,8 +112,7 @@ services:
       timeout: 5s
       retries: 5
     networks:
-      - farcaster-network
-      - my-network
+      - snapchain
 
   redis:
     image: redis:7.2-alpine
@@ -143,8 +128,7 @@ services:
       timeout: 5s
       retries: 5
     networks:
-      - farcaster-network
-      - my-network
+      - snapchain
 
   statsd:
     image: graphiteapp/graphite-statsd:1.1.10-5
@@ -155,7 +139,7 @@ services:
     volumes:
       - /mnt/point/statsd-data:/opt/graphite/storage
     networks:
-      - my-network
+      - snapchain
 
   redash:
     image: redash/redash:latest
@@ -171,8 +155,7 @@ services:
     volumes:
       - /mnt/point/redash-data:/app/data
     networks:
-      - farcaster-network
-      - my-network
+      - snapchain
 
 volumes:
   hubble-rocks:
@@ -181,6 +164,5 @@ volumes:
   replicator-node_modules:
 
 networks:
-  my-network:
-  farcaster-network:
+  snapchain:
     driver: bridge 
