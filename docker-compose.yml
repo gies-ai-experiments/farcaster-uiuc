@@ -45,7 +45,7 @@ services:
       - 3383:3383  # GRPC API
       - 9090:9090  # Metrics
     volumes:
-      - /datadrive/snapchain-data:/data
+      - /mnt/point/snapchain-data:/data
     networks:
       - my-network
     logging:
@@ -65,13 +65,12 @@ services:
       - '443:443/udp' # Needed for ACME TLS certificate
       - '3381:3381'   # Snapchain HTTP API
       - '3383:3383'   # Snapchain GRPC API
-      - '3000:3000'   # Grafana dashboard
       - '5000:5000'   # Redash
       - '9000:9000'   # Replicator web UI
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile
-      - caddy-data:/data
-      - caddy-config:/config
+      - /mnt/point/caddy-data:/data
+      - /mnt/point/caddy-config:/config
     networks:
       - my-network
 
@@ -92,7 +91,7 @@ services:
       - CONCURRENCY
       - PARTITIONS
     volumes:
-      - replicator-node_modules:/home/node/app/node_modules
+      - /mnt/point/replicator-node_modules:/home/node/app/node_modules
     depends_on:
       - snapchain
       - postgres
@@ -143,16 +142,8 @@ services:
     ports:
       - '8125:8125/udp' # StatsD
       - '8126:8126' # StatsD admin
-    networks:
-      - my-network
-
-  grafana:
-    image: grafana/grafana:10.0.3
-    restart: unless-stopped
-    user: "0"
     volumes:
-      - ./grafana/grafana.ini:/etc/grafana/grafana.ini
-      - grafana-data:/var/lib/grafana  # Persistent Grafana data
+      - /mnt/point/statsd-data:/opt/graphite/storage
     networks:
       - my-network
 
@@ -178,7 +169,6 @@ volumes:
   caddy-data:
   caddy-config:
   replicator-node_modules:
-  grafana-data:
 
 networks:
   my-network:
