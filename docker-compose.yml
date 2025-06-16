@@ -60,13 +60,13 @@ services:
     environment:
       - WEB_HOST_URL
     ports:
-      - '80:80'       # Needed for ACME TLS certificate
-      - '443:443'     # Needed for ACME TLS certificate
-      - '443:443/udp' # Needed for ACME TLS certificate
-      - '3381:3381'   # Snapchain HTTP API
-      - '3383:3383'   # Snapchain GRPC API
-      - '5000:5000'   # Redash
-      - '9000:9000'   # Replicator web UI
+      - '8080:80'       # Changed from 80 to 8080 for HTTP
+      - '8443:443'      # Changed from 443 to 8443 for HTTPS
+      - '8443:443/udp'  # Changed from 443 to 8443 for HTTPS UDP
+      - '3381:3381'     # Snapchain HTTP API
+      - '3383:3383'     # Snapchain GRPC API
+      - '5000:5000'     # Redash
+      - '9000:9000'     # Replicator web UI
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile
       - /mnt/point/caddy-data:/data
