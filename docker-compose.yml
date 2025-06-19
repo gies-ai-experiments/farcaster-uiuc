@@ -98,7 +98,7 @@ services:
       - snapchain
 
   postgres:
-    image: postgres:13
+    image: postgres:15
     restart: unless-stopped
     ports:
       - '5432:5432'
