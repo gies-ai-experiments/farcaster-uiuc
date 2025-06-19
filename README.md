@@ -288,3 +288,9 @@ For production use:
    - Confirm Hubble is running
    - Check RPC authentication
    - Verify network configuration
+
+
+- text to sql interface
+- check for image and video data on hub
+- mcp server (explore)
+- duck db (explore)

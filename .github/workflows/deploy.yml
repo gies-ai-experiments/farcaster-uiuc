@@ -98,6 +98,20 @@ jobs:
               echo "DB_USER=${{ secrets.DB_USER }}"
               echo "DB_PASSWORD=${{ secrets.DB_PASSWORD }}"
               echo "WEB_HOST_URL=${{ secrets.WEB_HOST_URL }}"
+              echo "REDASH_SECRET_KEY=${{ secrets.REDASH_SECRET_KEY }}"
+              echo "REDASH_COOKIE_SECRET=${{ secrets.REDASH_COOKIE_SECRET }}"
+              echo "LOG_LEVEL=info"
+              echo "HUB_HOST=snapchain:3381"
+              echo "HUB_SSL=false"
+              echo "POSTGRES_URL=postgresql://${{ secrets.DB_USER }}:${{ secrets.DB_PASSWORD }}@postgres:5432/${{ secrets.DB_NAME }}"
+              echo "REDIS_URL=redis://redis:6379"
+              echo "STATSD_HOST=statsd:8125"
+              echo "COLORIZE=true"
+              echo "WEB_UI_PORT=9000"
+              echo "CONCURRENCY=4"
+              echo "PARTITIONS=1"
+              echo "MAX_FID=100"
+              echo "BACKFILL_FIDS="
             } > .env
 
             echo "--- Verifying docker-compose.yml exists ---"
@@ -135,7 +149,7 @@ jobs:
             }
 
             :9000 {
-                reverse_proxy replicator:9000
+                reverse_proxy shuttle:9000
             }
             EOF
 
@@ -149,7 +163,7 @@ jobs:
             sleep 30 # Wait for containers to initialize
 
             # Check if the main services are running
-            SERVICES=("snapchain" "postgres" "replicator" "redis")
+            SERVICES=("snapchain" "postgres" "shuttle" "redis")
             for service in "${SERVICES[@]}"; do
                 if docker ps --filter "name=${service}" --filter "status=running" --format "{{.Names}}" | grep -q "${service}"; then
                     echo "${service} container is running."

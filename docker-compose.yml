@@ -70,24 +70,25 @@ services:
     networks:
       - snapchain
 
-  replicator:
-    image: farcasterxyz/replicator:latest
+  shuttle:
+    image: farcasterxyz/shuttle:latest
     restart: unless-stopped
-    init: true
-    command: ["sh", "-c", "sleep 30 && node build/app.js start"]
+    command: sh -c "yarn start worker & yarn start backfill & yarn start start"
     environment:
-      - LOG_LEVEL
-      - HUB_HOST
-      - HUB_SSL
-      - POSTGRES_URL
-      - REDIS_URL
-      - STATSD_HOST
-      - COLORIZE
-      - WEB_UI_PORT
-      - CONCURRENCY
-      - PARTITIONS
+      - LOG_LEVEL=info
+      - HUB_HOST=snapchain:3381
+      - HUB_SSL=false
+      - POSTGRES_URL=postgresql://${DB_USER}:${DB_PASSWORD}@postgres:5432/${DB_NAME}
+      - REDIS_URL=redis://redis:6379
+      - STATSD_HOST=statsd:8125
+      - COLORIZE=true
+      - WEB_UI_PORT=9000
+      - CONCURRENCY=4
+      - PARTITIONS=1
+      - MAX_FID=100
+      - BACKFILL_FIDS=
     volumes:
-      - /mnt/point/replicator-node_modules:/home/node/app/node_modules
+      - /mnt/point/shuttle-node_modules:/app/packages/shuttle/node_modules
     depends_on:
       - snap_read
       - postgres
@@ -150,8 +151,8 @@ services:
     environment:
       REDASH_DATABASE_URL: "postgresql://${DB_USER}:${DB_PASSWORD}@postgres/${DB_NAME}"
       REDASH_REDIS_URL: "redis://redis:6379/0"
-      REDASH_SECRET_KEY: "your-secret-key-here"
-      REDASH_COOKIE_SECRET: "your-cookie-secret-here"
+      REDASH_SECRET_KEY: ${REDASH_SECRET_KEY}
+      REDASH_COOKIE_SECRET: ${REDASH_COOKIE_SECRET}
     volumes:
       - /mnt/point/redash-data:/app/data
     networks:
@@ -161,7 +162,7 @@ volumes:
   hubble-rocks:
   caddy-data:
   caddy-config:
-  replicator-node_modules:
+  shuttle-node_modules:
 
 networks:
   snapchain:
