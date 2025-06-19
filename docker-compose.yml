@@ -23,7 +23,7 @@ services:
 
         [statsd]
         prefix="snap_read"
-        addr="127.0.0.1:8125"
+        addr="statsd:8125"
         use_tags=false
 
         [gossip]
@@ -49,6 +49,12 @@ services:
     volumes:
       - /mnt/point/rocks:/app/.rocks
       - /mnt/point/rocks-snapshot:/app/.rocks.snapshot
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3381/v1/info"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
     networks:
       - snapchain
 
@@ -81,7 +87,8 @@ services:
       - HUB_SSL=false
       - POSTGRES_URL=postgresql://${DB_USER}:${DB_PASSWORD}@postgres:5432/${DB_NAME}
       - REDIS_URL=redis://redis:6379
-      - STATSD_HOST=statsd:8125
+      - STATSD_HOST=statsd
+      - STATSD_PORT=8125
       - COLORIZE=true
       - WEB_UI_PORT=9000
       - CONCURRENCY=4
@@ -91,9 +98,14 @@ services:
     volumes:
       - /mnt/point/shuttle-node_modules:/app/packages/shuttle/node_modules
     depends_on:
-      - snap_read
-      - postgres
-      - redis
+      snap_read:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      statsd:
+        condition: service_started
     networks:
       - snapchain
 
@@ -136,10 +148,15 @@ services:
     image: graphiteapp/graphite-statsd:1.1.10-5
     restart: unless-stopped
     ports:
-      - '8125:8125/udp' # StatsD
-      - '8126:8126' # StatsD admin
+      - '8125:8125/udp'
+      - '8126:8126'
     volumes:
       - /mnt/point/statsd-data:/opt/graphite/storage
+    healthcheck:
+      test: ["CMD", "nc", "-zv", "localhost", "8125"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
     networks:
       - snapchain
 
