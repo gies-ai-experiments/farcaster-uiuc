@@ -1,0 +1,23 @@
+FROM node:21-alpine
+
+WORKDIR /app
+
+# Install git and build dependencies
+RUN apk add --no-cache git python3 make g++
+
+# Clone the repository
+RUN git clone https://github.com/farcasterxyz/hub-monorepo.git .
+
+# Build core package
+WORKDIR /app/packages/core
+RUN yarn install && yarn build
+
+# Build hub-nodejs package
+WORKDIR /app/packages/hub-nodejs
+RUN yarn install && yarn build
+
+# Build and setup shuttle
+WORKDIR /app/packages/shuttle
+RUN yarn install && yarn build
+
+CMD ["sh", "-c", "yarn start worker & yarn start backfill & yarn start start"] 

@@ -71,12 +71,13 @@ services:
       - snapchain
 
   shuttle:
-    image: farcasterxyz/shuttle:latest
+    build:
+      context: .
+      dockerfile: Dockerfile.shuttle
     restart: unless-stopped
-    command: sh -c "yarn start worker & yarn start backfill & yarn start start"
     environment:
       - LOG_LEVEL=info
-      - HUB_HOST=snapchain:3381
+      - HUB_HOST=snap_read:3381
       - HUB_SSL=false
       - POSTGRES_URL=postgresql://${DB_USER}:${DB_PASSWORD}@postgres:5432/${DB_NAME}
       - REDIS_URL=redis://redis:6379
