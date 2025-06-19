@@ -5,6 +5,9 @@ WORKDIR /app
 # Install git and build dependencies
 RUN apk add --no-cache git python3 make g++
 
+# Install tsx globally
+RUN yarn global add tsx
+
 # Clone the repository
 RUN git clone https://github.com/farcasterxyz/hub-monorepo.git .
 
@@ -19,5 +22,8 @@ RUN yarn install && yarn build
 # Build and setup shuttle
 WORKDIR /app/packages/shuttle
 RUN yarn install && yarn build
+
+# Ensure tsx is in the PATH
+ENV PATH="/usr/local/share/.config/yarn/global/node_modules/.bin:${PATH}"
 
 CMD ["sh", "-c", "yarn start worker & yarn start backfill & yarn start start"] 
