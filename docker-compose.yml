@@ -21,10 +21,10 @@ services:
         fc_network="Mainnet"
         read_node = true
 
-        [statsd]
-        prefix="snap_read"
-        addr="0.0.0.0:8125"
-        use_tags=false
+        # [statsd]
+        # prefix="snap_read"
+        # addr="0.0.0.0:8125"
+        # use_tags=false
 
         [gossip]
         address="/ip4/0.0.0.0/udp/3382/quic-v1"
@@ -87,8 +87,6 @@ services:
       - HUB_SSL=false
       - POSTGRES_URL=postgresql://${DB_USER}:${DB_PASSWORD}@postgres:5432/${DB_NAME}
       - REDIS_URL=redis://redis:6379
-      - STATSD_HOST=statsd
-      - STATSD_PORT=8125
       - COLORIZE=true
       - WEB_UI_PORT=9000
       - CONCURRENCY=4
@@ -104,8 +102,6 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-      statsd:
-        condition: service_started
     networks:
       - snapchain
 
@@ -141,22 +137,6 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-    networks:
-      - snapchain
-
-  statsd:
-    image: graphiteapp/graphite-statsd:1.1.10-5
-    restart: unless-stopped
-    ports:
-      - '8125:8125/udp'
-      - '8126:8126'
-    volumes:
-      - /mnt/point/statsd-data:/opt/graphite/storage
-    healthcheck:
-      test: ["CMD", "nc", "-zv", "localhost", "8125"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
     networks:
       - snapchain
 
