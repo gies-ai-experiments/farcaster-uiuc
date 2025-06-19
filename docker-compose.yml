@@ -23,7 +23,7 @@ services:
 
         [statsd]
         prefix="snap_read"
-        addr="statsd:8125"
+        addr="0.0.0.0:8125"
         use_tags=false
 
         [gossip]
