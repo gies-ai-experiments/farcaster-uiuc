@@ -17,7 +17,7 @@ def get_all_fids():
     fids = []
     page_token = None
     while True:
-        params = {"pageSize": 1000}
+        params = {}
         if page_token:
             params["pageToken"] = page_token
         url = f"{SNAPCHAIN_API}/v1/fids"
@@ -31,7 +31,7 @@ def get_all_fids():
     return fids
 
 def get_casts_by_fid(fid):
-    url = f"{SNAPCHAIN_API}/v1/castsByFid?fid={fid}&pageSize=100"
+    url = f"{SNAPCHAIN_API}/v1/castsByFid?fid={fid}"
     response = requests.get(url)
     response.raise_for_status()
     return response.json().get("messages", [])
