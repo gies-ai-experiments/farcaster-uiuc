@@ -21,10 +21,10 @@ services:
         fc_network="Mainnet"
         read_node = true
 
-        # [statsd]
-        # prefix="snap_read"
-        # addr="0.0.0.0:8125"
-        # use_tags=false
+        [statsd]
+        prefix="snap_read"
+        addr="0.0.0.0:8125"
+        use_tags=false
 
         [gossip]
         address="/ip4/0.0.0.0/udp/3382/quic-v1"
