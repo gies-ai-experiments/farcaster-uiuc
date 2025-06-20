@@ -156,6 +156,18 @@ services:
     networks:
       - snapchain
 
+  snapchain_sync:
+    build:
+      context: .
+      dockerfile: Dockerfile.snapchain_sync
+    environment:
+      - SNAPCHAIN_API=http://snap_read:3381
+      - POSTGRES_URL=postgresql://user:password@postgres:5432/dbname
+    depends_on:
+      - snap_read
+      - postgres
+    restart: unless-stopped
+
 volumes:
   hubble-rocks:
   caddy-data:
