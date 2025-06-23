@@ -76,7 +76,6 @@ def check_api_health():
 
 def get_all_fids():
     fids = []
-    page_token = None
     
     # Check if API is accessible, but don't fail if it's not
     if not check_api_health():
@@ -87,23 +86,47 @@ def get_all_fids():
             logger.warning("Cannot connect to snapchain API, will retry later")
             return []
     
+    # Get FIDs from both shards
+    for shard_id in [1, 2]:
+        logger.info(f"Fetching FIDs from shard {shard_id}")
+        shard_fids = get_fids_from_shard(shard_id)
+        fids.extend(shard_fids)
+        logger.info(f"Got {len(shard_fids)} FIDs from shard {shard_id}")
+    
+    # Remove duplicates while preserving order
+    unique_fids = list(dict.fromkeys(fids))
+    logger.info(f"Total unique FIDs from all shards: {len(unique_fids)}")
+    
+    return unique_fids
+
+def get_fids_from_shard(shard_id):
+    """Get FIDs from a specific shard"""
+    fids = []
+    page_token = None
+    
     try:
         while True:
-            params = {}
+            params = {"shard_id": shard_id}
             if page_token:
                 params["pageToken"] = page_token
+            
             url = f"{SNAPCHAIN_API}/v1/fids"
             logger.info(f"Requesting: {url} with params: {params}")
             resp = requests.get(url, params=params, timeout=30)
             resp.raise_for_status()
             data = resp.json()
-            fids.extend(data.get("fids", []))
+            
+            shard_fids = data.get("fids", [])
+            fids.extend(shard_fids)
             page_token = data.get("nextPageToken")
-            logger.info(f"Got {len(data.get('fids', []))} FIDs, nextPageToken: {page_token}")
+            
+            logger.info(f"Got {len(shard_fids)} FIDs from shard {shard_id}, nextPageToken: {page_token}")
+            
             if not page_token:
                 break
+                
     except Exception as e:
-        logger.error(f"Failed to get FIDs: {e}")
+        logger.error(f"Failed to get FIDs from shard {shard_id}: {e}")
         return []
     
     return fids
