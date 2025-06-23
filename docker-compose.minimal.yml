@@ -82,6 +82,7 @@ services:
     environment:
       - SNAPCHAIN_API=http://snap_read:3381
       - POSTGRES_URL=postgresql://${DB_USER:-user}:${DB_PASSWORD:-password}@postgres:5432/${DB_NAME:-dbname}
+      - MAX_WORKERS=10
     depends_on:
       postgres:
         condition: service_healthy
