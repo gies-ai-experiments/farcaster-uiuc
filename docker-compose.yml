@@ -164,8 +164,6 @@ services:
       - SNAPCHAIN_API=http://snap_read:3381
       - POSTGRES_URL=postgresql://${DB_USER}:${DB_PASSWORD}@postgres:5432/${DB_NAME}
     depends_on:
-      snap_read:
-        condition: service_healthy
       postgres:
         condition: service_healthy
     restart: unless-stopped
