@@ -163,7 +163,7 @@ jobs:
             sleep 30 # Wait for containers to initialize
 
             # Check if the main services are running
-            SERVICES=("snapchain" "postgres" "redis" "snapchain_sync")
+            SERVICES=("snap_read")
             for service in "${SERVICES[@]}"; do
                 if docker ps --filter "name=${service}" --filter "status=running" --format "{{.Names}}" | grep -q "${service}"; then
                     echo "${service} container is running."

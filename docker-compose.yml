@@ -58,23 +58,23 @@ services:
     networks:
       - snapchain
 
-  caddy:
-    image: caddy:latest
-    restart: unless-stopped
-    environment:
-      - WEB_HOST_URL
-    ports:
-      - '8080:80'       # HTTP
-      - '8443:443'      # HTTPS
-      - '8443:443/udp'  # HTTPS UDP
-      - '5000:5000'     # Redash
-      - '9000:9000'     # Replicator web UI
-    volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile
-      - /mnt/point/caddy-data:/data
-      - /mnt/point/caddy-config:/config
-    networks:
-      - snapchain
+  # caddy:
+  #   image: caddy:latest
+  #   restart: unless-stopped
+  #   environment:
+  #     - WEB_HOST_URL
+  #   ports:
+  #     - '8080:80'       # HTTP
+  #     - '8443:443'      # HTTPS
+  #     - '8443:443/udp'  # HTTPS UDP
+  #     - '5000:5000'     # Redash
+  #     - '9000:9000'     # Replicator web UI
+  #   volumes:
+  #     - ./Caddyfile:/etc/caddy/Caddyfile
+  #     - /mnt/point/caddy-data:/data
+  #     - /mnt/point/caddy-config:/config
+  #   networks:
+  #     - snapchain
 
   # shuttle:
   #   build:
@@ -105,79 +105,79 @@ services:
   #   networks:
   #     - snapchain
 
-  postgres:
-    image: postgres:15
-    restart: unless-stopped
-    ports:
-      - '5432:5432'
-    environment:
-      - POSTGRES_DB=${DB_NAME}
-      - POSTGRES_USER=${DB_USER}
-      - POSTGRES_PASSWORD=${DB_PASSWORD}
-    volumes:
-      - /mnt/point/postgres-data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    networks:
-      - snapchain
+  # postgres:
+  #   image: postgres:15
+  #   restart: unless-stopped
+  #   ports:
+  #     - '5432:5432'
+  #   environment:
+  #     - POSTGRES_DB=${DB_NAME}
+  #     - POSTGRES_USER=${DB_USER}
+  #     - POSTGRES_PASSWORD=${DB_PASSWORD}
+  #   volumes:
+  #     - /mnt/point/postgres-data:/var/lib/postgresql/data
+  #   healthcheck:
+  #     test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
+  #     interval: 10s
+  #     timeout: 5s
+  #     retries: 5
+  #   networks:
+  #     - snapchain
 
-  redis:
-    image: redis:7.2-alpine
-    restart: unless-stopped
-    command: --save "" --loglevel warning --maxmemory-policy noeviction
-    volumes:
-      - /mnt/point/redis-data:/data
-    ports:
-      - '6379:6379'
-    healthcheck:
-      test: [ 'CMD-SHELL', 'redis-cli', 'ping' ]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    networks:
-      - snapchain
+  # redis:
+  #   image: redis:7.2-alpine
+  #   restart: unless-stopped
+  #   command: --save "" --loglevel warning --maxmemory-policy noeviction
+  #   volumes:
+  #     - /mnt/point/redis-data:/data
+  #   ports:
+  #     - '6379:6379'
+  #   healthcheck:
+  #     test: [ 'CMD-SHELL', 'redis-cli', 'ping' ]
+  #     interval: 10s
+  #     timeout: 5s
+  #     retries: 5
+  #   networks:
+  #     - snapchain
 
-  redash:
-    image: redash/redash:latest
-    depends_on:
-      - postgres
-    ports:
-      - "5001:5000"
-    environment:
-      REDASH_DATABASE_URL: "postgresql://${DB_USER}:${DB_PASSWORD}@postgres/${DB_NAME}"
-      REDASH_REDIS_URL: "redis://redis:6379/0"
-      REDASH_SECRET_KEY: ${REDASH_SECRET_KEY}
-      REDASH_COOKIE_SECRET: ${REDASH_COOKIE_SECRET}
-    volumes:
-      - /mnt/point/redash-data:/app/data
-    networks:
-      - snapchain
+  # redash:
+  #   image: redash/redash:latest
+  #   depends_on:
+  #     - postgres
+  #   ports:
+  #     - "5001:5000"
+  #   environment:
+  #     REDASH_DATABASE_URL: "postgresql://${DB_USER}:${DB_PASSWORD}@postgres/${DB_NAME}"
+  #     REDASH_REDIS_URL: "redis://redis:6379/0"
+  #     REDASH_SECRET_KEY: ${REDASH_SECRET_KEY}
+  #     REDASH_COOKIE_SECRET: ${REDASH_COOKIE_SECRET}
+  #   volumes:
+  #     - /mnt/point/redash-data:/app/data
+  #   networks:
+  #     - snapchain
 
-  snapchain_sync:
-    build:
-      context: .
-      dockerfile: Dockerfile.snapchain_sync
-    environment:
-      - SNAPCHAIN_API=http://snap_read:3381
-      - POSTGRES_URL=postgresql://${DB_USER}:${DB_PASSWORD}@postgres:5432/${DB_NAME}
-      - MAX_WORKERS=10
-    depends_on:
-      postgres:
-        condition: service_healthy
-    restart: unless-stopped
-    networks:
-      - snapchain
-    stdin_open: true
-    tty: true
+  # snapchain_sync:
+  #   build:
+  #     context: .
+  #     dockerfile: Dockerfile.snapchain_sync
+  #   environment:
+  #     - SNAPCHAIN_API=http://snap_read:3381
+  #     - POSTGRES_URL=postgresql://${DB_USER}:${DB_PASSWORD}@postgres:5432/${DB_NAME}
+  #     - MAX_WORKERS=10
+  #   depends_on:
+  #     postgres:
+  #       condition: service_healthy
+  #   restart: unless-stopped
+  #   networks:
+  #     - snapchain
+  #   stdin_open: true
+  #   tty: true
 
 volumes:
   hubble-rocks:
-  caddy-data:
-  caddy-config:
-  shuttle-node_modules:
+  # caddy-data:
+  # caddy-config:
+  # shuttle-node_modules:
 
 networks:
   snapchain:
