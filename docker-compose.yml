@@ -58,24 +58,24 @@ services:
     networks:
       - snapchain
 
-  caddy:
-    image: caddy:latest
-    restart: unless-stopped
-    environment:
-      - WEB_HOST_URL=${WEB_HOST_URL}
-    ports:
-      - '80:80'         # HTTP
-      - '443:443'       # HTTPS
-      - '5000:5000'     # Redash direct access
-    volumes:
-      - /mnt/point/caddy:/etc/caddy
-      - /mnt/point/caddy-data:/data
-      - /mnt/point/caddy-config:/config
-    depends_on:
-      - redash
-      - snap_read
-    networks:
-      - snapchain
+  # caddy:
+  #   image: caddy:latest
+  #   restart: unless-stopped
+  #   environment:
+  #     - WEB_HOST_URL=${WEB_HOST_URL}
+  #   ports:
+  #     - '80:80'         # HTTP
+  #     - '443:443'       # HTTPS
+  #     - '5000:5000'     # Redash direct access
+  #   volumes:
+  #     - /mnt/point/caddy:/etc/caddy
+  #     - /mnt/point/caddy-data:/data
+  #     - /mnt/point/caddy-config:/config
+  #   depends_on:
+  #     - redash
+  #     - snap_read
+  #   networks:
+  #     - snapchain
 
   shuttle:
     build:

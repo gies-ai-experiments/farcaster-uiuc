@@ -128,47 +128,7 @@ jobs:
             } > .env
 
             echo "--- Ensuring data directory exists ---"
-            sudo mkdir -p "$DATA_DIR/caddy"
-
-            echo "--- Creating Caddyfile ---"
-            cat > "$DATA_DIR/caddy/Caddyfile" << 'EOF'
-            {
-                admin off
-            }
-
-            # Main domain routes (if WEB_HOST_URL is set)
-            {$WEB_HOST_URL} {
-                route /redash/* {
-                    uri strip_prefix /redash
-                    reverse_proxy redash:5000
-                }
-                route /api/* {
-                    reverse_proxy snap_read:3381
-                }
-                reverse_proxy snap_read:3381
-            }
-
-            # Direct port access for development/testing
-            :80 {
-                route /redash/* {
-                    uri strip_prefix /redash
-                    reverse_proxy redash:5000
-                }
-                reverse_proxy snap_read:3381
-            }
-
-            :5000 {
-                reverse_proxy redash:5000
-            }
-
-            :3381 {
-                reverse_proxy snap_read:3381
-            }
-
-            :3383 {
-                reverse_proxy snap_read:3383
-            }
-            EOF
+            #sudo mkdir -p "$DATA_DIR"
 
             echo "--- Verifying docker-compose.yml exists ---"
             if [ ! -f docker-compose.yml ]; then
@@ -188,7 +148,7 @@ jobs:
             sleep 60 # Wait for containers to initialize (increased for shuttle build time)
 
             # Check if the main services are running
-            SERVICES=("snap_read" "postgres" "redis" "shuttle" "redash" "caddy")
+            SERVICES=("snap_read" "postgres" "redis" "shuttle" "redash")
             for service in "${SERVICES[@]}"; do
                 if docker ps --filter "name=${service}" --filter "status=running" --format "{{.Names}}" | grep -q "${service}"; then
                     echo "${service} container is running."
