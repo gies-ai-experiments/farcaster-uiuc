@@ -28,6 +28,19 @@ venv/
 ENV/
 env/
 
+# Node.js
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+package-lock.json
+yarn.lock
+
+# Hub-monorepo node_modules
+hub-monorepo/node_modules/
+hub-monorepo/packages/*/node_modules/
+hub-monorepo/packages/*/dist/
+
 # IDE
 .idea/
 .vscode/
