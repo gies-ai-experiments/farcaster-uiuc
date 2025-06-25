@@ -128,11 +128,10 @@ jobs:
             } > .env
 
             echo "--- Ensuring data directory exists ---"
-            sudo mkdir -p "$DATA_DIR"
-            sudo chown $USER:$USER "$DATA_DIR"
+            sudo mkdir -p "$DATA_DIR/caddy"
 
             echo "--- Creating Caddyfile ---"
-            cat > "$DATA_DIR/Caddyfile" << 'EOF'
+            cat > "$DATA_DIR/caddy/Caddyfile" << 'EOF'
             {
                 admin off
             }

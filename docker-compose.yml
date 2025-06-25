@@ -68,7 +68,7 @@ services:
       - '443:443'       # HTTPS
       - '5000:5000'     # Redash direct access
     volumes:
-      - /mnt/point/Caddyfile:/etc/caddy/Caddyfile
+      - /mnt/point/caddy:/etc/caddy
       - /mnt/point/caddy-data:/data
       - /mnt/point/caddy-config:/config
     depends_on:

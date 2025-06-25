@@ -14,20 +14,20 @@ RUN ls -la && echo "--- Packages directory ---" && ls -la packages/
 # Install root dependencies
 RUN npm install --legacy-peer-deps
 
-# Build core package
+# Build packages in dependency order
 WORKDIR /app/packages/core
-RUN npm run build
+RUN npm install && npm run build
 
-# Build hub-nodejs package
+# Build hub-nodejs package (depends on core)
 WORKDIR /app/packages/hub-nodejs
-RUN npm run build
+RUN npm install && npm run build
 
-# Build and setup shuttle
+# Build shuttle package (depends on hub-nodejs and core)
 WORKDIR /app/packages/shuttle
-RUN npm run build
+RUN npm install && npm run build
 
 # Install tsx globally for running TypeScript
 RUN npm install -g tsx
 
-# Run multiple shuttle processes: worker for backfill processing, backfill to queue jobs, and start for main sync
-CMD ["sh", "-c", "tsx src/example-app/app.ts worker & tsx src/example-app/app.ts backfill & tsx src/example-app/app.ts start & wait"] 
+# Start with just the main shuttle process to avoid database connection race conditions
+CMD ["tsx", "src/example-app/app.ts", "start"] 
