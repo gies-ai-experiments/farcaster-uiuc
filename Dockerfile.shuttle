@@ -5,25 +5,25 @@ WORKDIR /app
 # Install git and build dependencies
 RUN apk add --no-cache git python3 make g++
 
-# Install tsx globally
-RUN yarn global add tsx
+# Copy the entire hub-monorepo from local directory
+COPY hub-monorepo/ .
 
-# Clone the repository
-RUN git clone https://github.com/farcasterxyz/hub-monorepo.git .
+# Install root dependencies
+RUN npm install --legacy-peer-deps
 
 # Build core package
 WORKDIR /app/packages/core
-RUN yarn install && yarn build
+RUN npm run build
 
 # Build hub-nodejs package
 WORKDIR /app/packages/hub-nodejs
-RUN yarn install && yarn build
+RUN npm run build
 
 # Build and setup shuttle
 WORKDIR /app/packages/shuttle
-RUN yarn install && yarn build
+RUN npm run build
 
-# Ensure tsx is in the PATH
-ENV PATH="/usr/local/share/.config/yarn/global/node_modules/.bin:${PATH}"
+# Install tsx globally for running TypeScript
+RUN npm install -g tsx
 
-CMD ["sh", "-c", "yarn start worker & yarn start backfill & yarn start start"] 
+CMD ["sh", "-c", "tsx src/example-app/app.ts start"] 

@@ -86,12 +86,12 @@ services:
       - HUB_HOST=snap_read:3383
       - HUB_SSL=false
       - POSTGRES_URL=postgresql://${DB_USER}:${DB_PASSWORD}@postgres:5432/${DB_NAME}
+      - POSTGRES_SCHEMA=postgres
       - REDIS_URL=redis://redis:6379
       - COLORIZE=true
-      - WEB_UI_PORT=9000
       - CONCURRENCY=4
-      - SHARDS=2 
-      - SHARD_NUM=1
+      - SHARDS=0
+      - SHARD_NUM=0
     volumes:
       - /mnt/point/shuttle-node_modules:/app/packages/shuttle/node_modules
     depends_on:
