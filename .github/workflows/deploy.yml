@@ -127,8 +127,7 @@ jobs:
               echo "BACKFILL_FIDS="
             } > .env
 
-            echo "--- Ensuring data directory exists ---"
-            #sudo mkdir -p "$DATA_DIR"
+            echo "--- Data directory already exists at $DATA_DIR ---"
 
             echo "--- Verifying docker-compose.yml exists ---"
             if [ ! -f docker-compose.yml ]; then
@@ -145,7 +144,15 @@ jobs:
             docker compose up -d --build
 
             echo "--- Verifying container startup ---"
-            sleep 60 # Wait for containers to initialize (increased for shuttle build time)
+            sleep 30 # Initial wait for containers to start
+
+            echo "--- Checking all containers status ---"
+            docker compose ps
+
+            echo "--- Checking postgres specifically ---"
+            docker compose logs postgres --tail 20
+
+            sleep 30 # Additional wait for postgres initialization
 
             # Check if the main services are running
             SERVICES=("snap_read" "postgres" "redis" "shuttle" "redash")
@@ -156,6 +163,8 @@ jobs:
                     echo "Error: ${service} container did not start correctly."
                     echo "Recent logs for ${service} container:"
                     docker compose logs --tail 50 ${service}
+                    echo "Container status:"
+                    docker compose ps ${service}
                     exit 1
                 fi
             done
