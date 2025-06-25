@@ -90,6 +90,8 @@ services:
       - COLORIZE=true
       - WEB_UI_PORT=9000
       - CONCURRENCY=4
+      - SHARDS=2 
+      - SHARD_NUM=1
     volumes:
       - /mnt/point/shuttle-node_modules:/app/packages/shuttle/node_modules
     depends_on:
