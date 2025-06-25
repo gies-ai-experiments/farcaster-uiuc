@@ -91,8 +91,8 @@ services:
       - WEB_UI_PORT=9000
       - CONCURRENCY=4
       - PARTITIONS=2
-      - SHARD_INDEX=1
       - TOTAL_SHARDS=2
+      - DISABLE_SHARD_FILTERING=true
       - MAX_FID=100
       - BACKFILL_FIDS=
     volumes:
