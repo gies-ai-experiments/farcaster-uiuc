@@ -5,8 +5,21 @@ WORKDIR /app
 # Install git and build dependencies
 RUN apk add --no-cache git python3 make g++
 
-# Copy the entire hub-monorepo from local directory
-COPY hub-monorepo/ .
+# Copy package.json and other root files first
+COPY hub-monorepo/package.json /app/package.json
+COPY hub-monorepo/package-lock.json /app/package-lock.json
+COPY hub-monorepo/tsconfig.json /app/tsconfig.json
+COPY hub-monorepo/turbo.json /app/turbo.json
+
+# Copy the packages directory
+COPY hub-monorepo/packages/ /app/packages/
+
+# Copy other necessary files
+COPY hub-monorepo/.yarnrc /app/.yarnrc
+COPY hub-monorepo/biome.json /app/biome.json
+
+# Verify package.json exists and show directory structure
+RUN ls -la /app/ && cat /app/package.json
 
 # Install root dependencies
 RUN npm install --legacy-peer-deps
@@ -26,4 +39,5 @@ RUN npm run build
 # Install tsx globally for running TypeScript
 RUN npm install -g tsx
 
-CMD ["sh", "-c", "tsx src/example-app/app.ts start"] 
+# Run multiple shuttle processes: worker for backfill processing, backfill to queue jobs, and start for main sync
+CMD ["sh", "-c", "cd /app/packages/shuttle && tsx src/example-app/app.ts worker & tsx src/example-app/app.ts backfill & tsx src/example-app/app.ts start & wait"] 
