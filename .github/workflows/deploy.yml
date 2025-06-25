@@ -41,7 +41,7 @@ jobs:
           script: |
             # Define variables for paths and names on the VM
             PROJECT_DIR="/opt/farcaster-snapchain"
-            DATA_DIR="/datadrive/snapchain-data"
+            DATA_DIR="/mnt/point"
 
             echo "--- Checking for Docker installation ---"
             if ! command -v docker &> /dev/null
@@ -114,16 +114,12 @@ jobs:
               echo "BACKFILL_FIDS="
             } > .env
 
-            echo "--- Verifying docker-compose.yml exists ---"
-            if [ ! -f docker-compose.yml ]; then
-                echo "docker-compose.yml not found in $PROJECT_DIR! Listing files:"
-                ls -la
-                exit 1
-            fi
-            echo "Required files found."
+            echo "--- Ensuring data directory exists ---"
+            sudo mkdir -p "$DATA_DIR"
+            sudo chown -R $USER:$USER "$DATA_DIR"
 
             echo "--- Creating Caddyfile ---"
-            cat > /mnt/point/Caddyfile << 'EOF'
+            cat > "$DATA_DIR/Caddyfile" << 'EOF'
             {
                 admin off
             }
@@ -161,6 +157,14 @@ jobs:
                 reverse_proxy snap_read:3383
             }
             EOF
+
+            echo "--- Verifying docker-compose.yml exists ---"
+            if [ ! -f docker-compose.yml ]; then
+                echo "docker-compose.yml not found in $PROJECT_DIR! Listing files:"
+                ls -la
+                exit 1
+            fi
+            echo "Required files found."
 
             echo "--- Stopping existing containers ---"
             docker compose down || true
