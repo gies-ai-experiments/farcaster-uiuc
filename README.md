@@ -134,6 +134,25 @@ The GitHub Actions workflow will:
 3. Copy the docker-compose.yml file to the server
 4. The GitHub Actions workflow will handle the rest of the setup
 
+#### NCSA Radiant Infrastructure
+
+For deployment on NCSA Radiant infrastructure, refer to the comprehensive guide for creating and managing VM instances:
+
+**[NCSA Radiant User Guide - Creating New Instances](https://docs.ncsa.illinois.edu/systems/radiant/en/latest/user-guide/new-instances.html)**
+
+This guide covers:
+- Creating VMs with appropriate flavors and security groups
+- Setting up SSH access with key pairs
+- Configuring floating IPs for external access
+- Mounting additional storage volumes
+- Troubleshooting common access and connectivity issues
+
+Make sure to:
+- Add "remote SSH" security group for SSH access
+- Configure floating IP if external access is needed
+- Set up proper firewall rules for your application ports
+- Mount additional Taiga bulk storage for data persistence
+
 # Farcaster Data Collection with Docker Compose
 
 This Docker Compose setup provides a complete Farcaster data collection and analysis platform, including:

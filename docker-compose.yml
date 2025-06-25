@@ -76,69 +76,69 @@ services:
   #   networks:
   #     - snapchain
 
-  # shuttle:
-  #   build:
-  #     context: .
-  #     dockerfile: Dockerfile.shuttle
-  #   restart: unless-stopped
-  #   environment:
-  #     - LOG_LEVEL=info
-  #     - HUB_HOST=snap_read:3381
-  #     - HUB_SSL=false
-  #     - POSTGRES_URL=postgresql://${DB_USER}:${DB_PASSWORD}@postgres:5432/${DB_NAME}
-  #     - REDIS_URL=redis://redis:6379
-  #     - COLORIZE=true
-  #     - WEB_UI_PORT=9000
-  #     - CONCURRENCY=4
-  #     - PARTITIONS=1
-  #     - MAX_FID=100
-  #     - BACKFILL_FIDS=
-  #   volumes:
-  #     - /mnt/point/shuttle-node_modules:/app/packages/shuttle/node_modules
-  #   depends_on:
-  #     snap_read:
-  #       condition: service_healthy
-  #     postgres:
-  #       condition: service_healthy
-  #     redis:
-  #       condition: service_healthy
-  #   networks:
-  #     - snapchain
+  shuttle:
+    build:
+      context: .
+      dockerfile: Dockerfile.shuttle
+    restart: unless-stopped
+    environment:
+      - LOG_LEVEL=info
+      - HUB_HOST=snap_read:3381
+      - HUB_SSL=false
+      - POSTGRES_URL=postgresql://${DB_USER}:${DB_PASSWORD}@postgres:5432/${DB_NAME}
+      - REDIS_URL=redis://redis:6379
+      - COLORIZE=true
+      - WEB_UI_PORT=9000
+      - CONCURRENCY=4
+      - PARTITIONS=1
+      - MAX_FID=100
+      - BACKFILL_FIDS=
+    volumes:
+      - /mnt/point/shuttle-node_modules:/app/packages/shuttle/node_modules
+    depends_on:
+      snap_read:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - snapchain
 
-  # postgres:
-  #   image: postgres:15
-  #   restart: unless-stopped
-  #   ports:
-  #     - '5432:5432'
-  #   environment:
-  #     - POSTGRES_DB=${DB_NAME}
-  #     - POSTGRES_USER=${DB_USER}
-  #     - POSTGRES_PASSWORD=${DB_PASSWORD}
-  #   volumes:
-  #     - /mnt/point/postgres-data:/var/lib/postgresql/data
-  #   healthcheck:
-  #     test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
-  #     interval: 10s
-  #     timeout: 5s
-  #     retries: 5
-  #   networks:
-  #     - snapchain
+  postgres:
+    image: postgres:15
+    restart: unless-stopped
+    ports:
+      - '5432:5432'
+    environment:
+      - POSTGRES_DB=${DB_NAME}
+      - POSTGRES_USER=${DB_USER}
+      - POSTGRES_PASSWORD=${DB_PASSWORD}
+    volumes:
+      - /mnt/point/postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - snapchain
 
-  # redis:
-  #   image: redis:7.2-alpine
-  #   restart: unless-stopped
-  #   command: --save "" --loglevel warning --maxmemory-policy noeviction
-  #   volumes:
-  #     - /mnt/point/redis-data:/data
-  #   ports:
-  #     - '6379:6379'
-  #   healthcheck:
-  #     test: [ 'CMD-SHELL', 'redis-cli', 'ping' ]
-  #     interval: 10s
-  #     timeout: 5s
-  #     retries: 5
-  #   networks:
-  #     - snapchain
+  redis:
+    image: redis:7.2-alpine
+    restart: unless-stopped
+    command: --save "" --loglevel warning --maxmemory-policy noeviction
+    volumes:
+      - /mnt/point/redis-data:/data
+    ports:
+      - '6379:6379'
+    healthcheck:
+      test: [ 'CMD-SHELL', 'redis-cli', 'ping' ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - snapchain
 
   # redash:
   #   image: redash/redash:latest
@@ -177,7 +177,7 @@ volumes:
   hubble-rocks:
   # caddy-data:
   # caddy-config:
-  # shuttle-node_modules:
+  shuttle-node_modules:
 
 networks:
   snapchain:

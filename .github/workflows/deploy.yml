@@ -149,7 +149,7 @@ jobs:
             }
 
             :9000 {
-                # shuttle service disabled
+                reverse_proxy shuttle:9000
             }
             EOF
 
@@ -160,10 +160,10 @@ jobs:
             docker compose up -d --build
 
             echo "--- Verifying container startup ---"
-            sleep 30 # Wait for containers to initialize
+            sleep 60 # Wait for containers to initialize (increased for shuttle build time)
 
             # Check if the main services are running
-            SERVICES=("snap_read")
+            SERVICES=("snap_read" "postgres" "redis" "shuttle")
             for service in "${SERVICES[@]}"; do
                 if docker ps --filter "name=${service}" --filter "status=running" --format "{{.Names}}" | grep -q "${service}"; then
                     echo "${service} container is running."
