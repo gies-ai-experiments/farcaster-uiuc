@@ -58,23 +58,24 @@ services:
     networks:
       - snapchain
 
-  # caddy:
-  #   image: caddy:latest
-  #   restart: unless-stopped
-  #   environment:
-  #     - WEB_HOST_URL
-  #   ports:
-  #     - '8080:80'       # HTTP
-  #     - '8443:443'      # HTTPS
-  #     - '8443:443/udp'  # HTTPS UDP
-  #     - '5000:5000'     # Redash
-  #     - '9000:9000'     # Replicator web UI
-  #   volumes:
-  #     - ./Caddyfile:/etc/caddy/Caddyfile
-  #     - /mnt/point/caddy-data:/data
-  #     - /mnt/point/caddy-config:/config
-  #   networks:
-  #     - snapchain
+  caddy:
+    image: caddy:latest
+    restart: unless-stopped
+    environment:
+      - WEB_HOST_URL=${WEB_HOST_URL}
+    ports:
+      - '80:80'         # HTTP
+      - '443:443'       # HTTPS
+      - '5000:5000'     # Redash direct access
+    volumes:
+      - /mnt/point/Caddyfile:/etc/caddy/Caddyfile
+      - /mnt/point/caddy-data:/data
+      - /mnt/point/caddy-config:/config
+    depends_on:
+      - redash
+      - snap_read
+    networks:
+      - snapchain
 
   shuttle:
     build:
@@ -205,11 +206,7 @@ services:
   #   stdin_open: true
   #   tty: true
 
-volumes:
-  hubble-rocks:
-  # caddy-data:
-  # caddy-config:
-  shuttle-node_modules:
+volumes: {}
 
 networks:
   snapchain:

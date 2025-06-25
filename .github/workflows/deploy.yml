@@ -123,37 +123,42 @@ jobs:
             echo "Required files found."
 
             echo "--- Creating Caddyfile ---"
-            cat > Caddyfile << 'EOF'
+            cat > /mnt/point/Caddyfile << 'EOF'
             {
                 admin off
             }
 
+            # Main domain routes (if WEB_HOST_URL is set)
+            {$WEB_HOST_URL} {
+                route /redash/* {
+                    uri strip_prefix /redash
+                    reverse_proxy redash:5000
+                }
+                route /api/* {
+                    reverse_proxy snap_read:3381
+                }
+                reverse_proxy snap_read:3381
+            }
+
+            # Direct port access for development/testing
             :80 {
-                reverse_proxy snapchain:3381
-            }
-
-            :443 {
-                reverse_proxy snapchain:3381
-            }
-
-            :3381 {
-                reverse_proxy snapchain:3381
-            }
-
-            :3383 {
-                reverse_proxy snapchain:3383
+                route /redash/* {
+                    uri strip_prefix /redash
+                    reverse_proxy redash:5000
+                }
+                reverse_proxy snap_read:3381
             }
 
             :5000 {
                 reverse_proxy redash:5000
             }
 
-            :5001 {
-                reverse_proxy redash:5000
+            :3381 {
+                reverse_proxy snap_read:3381
             }
 
-            :9000 {
-                reverse_proxy shuttle:9000
+            :3383 {
+                reverse_proxy snap_read:3383
             }
             EOF
 
@@ -167,7 +172,7 @@ jobs:
             sleep 60 # Wait for containers to initialize (increased for shuttle build time)
 
             # Check if the main services are running
-            SERVICES=("snap_read" "postgres" "redis" "shuttle" "redash")
+            SERVICES=("snap_read" "postgres" "redis" "shuttle" "redash" "caddy")
             for service in "${SERVICES[@]}"; do
                 if docker ps --filter "name=${service}" --filter "status=running" --format "{{.Names}}" | grep -q "${service}"; then
                     echo "${service} container is running."
