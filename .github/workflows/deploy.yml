@@ -148,6 +148,10 @@ jobs:
                 reverse_proxy redash:5000
             }
 
+            :5001 {
+                reverse_proxy redash:5000
+            }
+
             :9000 {
                 reverse_proxy shuttle:9000
             }
@@ -163,7 +167,7 @@ jobs:
             sleep 60 # Wait for containers to initialize (increased for shuttle build time)
 
             # Check if the main services are running
-            SERVICES=("snap_read" "postgres" "redis" "shuttle")
+            SERVICES=("snap_read" "postgres" "redis" "shuttle" "redash")
             for service in "${SERVICES[@]}"; do
                 if docker ps --filter "name=${service}" --filter "status=running" --format "{{.Names}}" | grep -q "${service}"; then
                     echo "${service} container is running."

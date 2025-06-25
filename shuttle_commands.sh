@@ -12,7 +12,7 @@ source .env
 # Set Shuttle environment variables based on Snapchain docs
 export POSTGRES_URL="postgresql://${DB_USER}:${DB_PASSWORD}@localhost:5432/${DB_NAME}"
 export REDIS_URL="localhost:6379"
-export HUB_HOST="localhost:3381"
+export HUB_HOST="localhost:3383"
 export HUB_SSL="false"
 
 echo "Environment configured:"
