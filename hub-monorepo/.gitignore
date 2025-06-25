@@ -1,0 +1,51 @@
+# Logs
+yarn-debug.log*
+yarn-error.log*
+hub.log
+
+.DS_Store
+**/.DS_Store
+
+# Compiled binary addons (https://nodejs.org/api/addons.html)
+build/Release
+build
+.history
+.hub_history
+
+# Dependency directories
+node_modules/
+
+# TypeScript cache
+*.tsbuildinfo
+
+# Environment variables
+.env
+
+.eslintcache
+depot.json
+
+.console-history
+
+# Code Coverage Reports
+coverage/
+
+# Databases
+.level/
+.rocks/
+
+# Application configuration files
+.hub/
+
+# Turborepo
+.turbo
+out
+
+dist
+
+# Editor Cache
+.vscode/*
+!.vscode/settings.json
+.idea
+.fleet
+**/.vitepress/cache/
+**/.vitepress/dist/

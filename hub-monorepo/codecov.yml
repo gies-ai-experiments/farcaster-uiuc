@@ -1,0 +1,17 @@
+coverage:
+  status:
+    project:
+      default:
+        # TODO: make 85% once https://github.com/farcasterxyz/hub/issues/303 is resolved
+        target: 70%
+        threshold: 1%
+    patch:
+      default:
+        target: auto
+        threshold: 0%
+        base: auto
+        if_ci_failed: success
+ignore:
+  - '**/generated'
+  - '**/mocks.ts'
+  - '**/test'

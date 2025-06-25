@@ -1,0 +1,39 @@
+{
+  "name": "@farcaster/hub-web",
+  "version": "0.11.0",
+  "main": "./dist/index.js",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "require": "./dist/index.js",
+      "import": "./dist/index.mjs",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/farcasterxyz/hub-monorepo/blob/main/packages/hub-web"
+  },
+  "scripts": {
+    "build": "tsup --config tsup.config.ts",
+    "clean": "rimraf ./dist",
+    "protoc": "LIBRARY=hub-web ../../generate-protos.sh",
+    "lint": "biome format src/ examples/ --write && biome check src/ examples/ --apply",
+    "lint:ci": "biome ci src/ examples/",
+    "prepublishOnly": "yarn run build"
+  },
+  "devDependencies": {
+    "biome-config-custom": "*",
+    "ts-proto": "^1.146.0"
+  },
+  "dependencies": {
+    "@farcaster/core": "^0.18.0",
+    "@improbable-eng/grpc-web": "^0.15.0",
+    "rxjs": "^7.8.0"
+  }
+}
