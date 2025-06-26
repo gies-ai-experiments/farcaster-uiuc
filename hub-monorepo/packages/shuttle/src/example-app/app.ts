@@ -302,15 +302,119 @@ export class App implements MessageHandler {
     }
   }
 
+  async discoverAllFidsFromHub(): Promise<number[]> {
+    log.info("Discovering all FIDs using hub's native getFids API...");
+    const allFids: Set<number> = new Set();
+    
+    // Use the hub's native getFids API for each shard
+    for (let shardIdx = 0; shardIdx < this.hubSubscribers.length; shardIdx++) {
+      const hubClient = this.hubSubscribers[shardIdx].hubClient;
+      if (!hubClient) {
+        log.warn(`Hub client for shard ${shardIdx + 1} is not available, skipping`);
+        continue;
+      }
+      
+      log.info(`Getting FIDs from shard ${shardIdx + 1}...`);
+      let pageToken: Uint8Array | undefined;
+      let totalForShard = 0;
+      
+      try {
+        do {
+          const result = await hubClient.getFids({ 
+            shardId: shardIdx + 1,
+            pageSize: 1000, // Large page size for efficiency
+            pageToken 
+          });
+          
+          if (result.isErr()) {
+            log.error(`Failed to get FIDs from shard ${shardIdx + 1}: ${result.error.message}`);
+            break;
+          }
+          
+          const { fids, nextPageToken } = result.value;
+          fids.forEach(fid => allFids.add(fid));
+          totalForShard += fids.length;
+          pageToken = nextPageToken;
+          
+          log.info(`Got ${fids.length} FIDs from shard ${shardIdx + 1}, total for shard: ${totalForShard}, overall total: ${allFids.size}`);
+          
+        } while (pageToken && pageToken.length > 0);
+        
+        log.info(`Completed shard ${shardIdx + 1}: ${totalForShard} FIDs`);
+        
+      } catch (error) {
+        log.error(`Error getting FIDs from shard ${shardIdx + 1}:`, error);
+      }
+    }
+    
+    const fidArray = Array.from(allFids).sort((a, b) => a - b);
+    log.info(`Native FID discovery complete. Found ${fidArray.length} total FIDs from ${this.hubSubscribers.length} shards`);
+    if (fidArray.length > 0) {
+      log.info(`FID range: ${Math.min(...fidArray)} - ${Math.max(...fidArray)}`);
+    }
+    
+    return fidArray;
+  }
+
+  async getLatestFidFromHub(): Promise<number> {
+    // Try to get the latest FID from any shard
+    for (let shardIdx = 0; shardIdx < this.hubSubscribers.length; shardIdx++) {
+      const hubClient = this.hubSubscribers[shardIdx].hubClient;
+      if (!hubClient) continue;
+      
+      try {
+        // Get hub info to find the latest FID
+        const infoResult = await hubClient.getInfo();
+        if (infoResult.isErr()) continue;
+        
+        // Try to get FIDs in reverse order to find the highest FID quickly
+        const fidsResult = await hubClient.getFids({ 
+          shardId: shardIdx + 1,
+          pageSize: 100,
+          reverse: true // Get latest FIDs first
+        });
+        
+        if (fidsResult.isOk() && fidsResult.value.fids.length > 0) {
+          const latestFid = Math.max(...fidsResult.value.fids);
+          log.info(`Found latest FID ${latestFid} from shard ${shardIdx + 1}`);
+          return latestFid;
+        }
+      } catch (error) {
+        log.debug(`Error getting latest FID from shard ${shardIdx + 1}: ${error}`);
+      }
+    }
+    
+    // Default fallback if we can't determine latest FID
+    log.warn("Could not determine latest FID from hub, using conservative estimate");
+    return 1000000; // Conservative fallback
+  }
+
   async discoverAllFids(): Promise<number[]> {
-    log.info("Discovering all FIDs from hub...");
+    // Try the native getFids API first (much more efficient)
+    try {
+      const nativeFids = await this.discoverAllFidsFromHub();
+      if (nativeFids.length > 0) {
+        log.info(`Successfully discovered ${nativeFids.length} FIDs using native API`);
+        return nativeFids;
+      }
+      log.warn("Native getFids API returned no FIDs, falling back to manual discovery");
+    } catch (error) {
+      log.warn(`Native getFids API failed: ${error}, falling back to manual discovery`);
+    }
+    
+    // Fallback to manual discovery with dynamic range
+    log.info("Discovering all FIDs from hub using manual method...");
+    const latestFid = await this.getLatestFidFromHub();
+    const searchRange = latestFid + 100000; // Search a bit beyond the latest known FID
+    log.info(`Will search for FIDs up to ${searchRange} (latest known: ${latestFid})`);
+    
     const allFids: Set<number> = new Set();
     let currentFid = 1;
-    const batchSize = 100;
+    const batchSize = 500; // Increased batch size for efficiency
     
-    while (true) {
+    while (currentFid <= searchRange) {
       try {
-        log.info(`Checking FIDs starting from ${currentFid}...`);
+        log.info(`Checking FIDs starting from ${currentFid}... (Found ${allFids.size} so far)`);
         
         // Try to get any messages for a batch of FIDs to see which ones exist
         let foundAnyInBatch = false;
@@ -318,13 +422,14 @@ export class App implements MessageHandler {
         
         for (let i = 0; i < batchSize; i++) {
           const fid = currentFid + i;
+          if (fid > searchRange) break;
+          
           let fidHasMessages = false;
           
           try {
             // Check ALL shards for this FID
             for (let shardIdx = 0; shardIdx < this.hubSubscribers.length && !fidHasMessages; shardIdx++) {
               const hubClient = this.hubSubscribers[shardIdx].hubClient;
-              log.info(`Checking FID ${fid} on shard ${shardIdx + 1}`);
               
               // Check for different types of messages on this shard
               const messageChecks = [
@@ -348,7 +453,7 @@ export class App implements MessageHandler {
                   const result = await checkFn();
                   if (result?.isOk() && result.value.messages.length > 0) {
                     fidHasMessages = true;
-                    log.info(`Found FID ${fid} with messages on shard ${shardIdx + 1}`);
+                    log.debug(`Found FID ${fid} with messages on shard ${shardIdx + 1}`);
                     break;
                   }
                 } catch (error) {
@@ -372,16 +477,21 @@ export class App implements MessageHandler {
         fidBatch.forEach(fid => allFids.add(fid));
         currentFid += batchSize;
         
-        // If we didn't find any FIDs in this batch, try a few more batches before giving up
+        // If we didn't find any FIDs in this batch, try more batches before giving up
         if (!foundAnyInBatch) {
-          log.info(`No FIDs found in batch starting at ${currentFid - batchSize}, checking a few more batches...`);
+          log.info(`No FIDs found in batch starting at ${currentFid - batchSize}, checking more batches...`);
           let emptyBatches = 1;
-          const maxEmptyBatches = 10; // Check 10 empty batches before stopping
           
-          while (emptyBatches < maxEmptyBatches) {
+          // Dynamic empty batch limit based on how close we are to the known latest FID
+          const remainingRange = searchRange - currentFid;
+          const maxEmptyBatches = remainingRange > 500000 ? 200 : 50; // More patience if we're far from the end
+          
+          while (emptyBatches < maxEmptyBatches && currentFid <= searchRange) {
             let foundInSkippedBatch = false;
             for (let i = 0; i < batchSize; i++) {
               const fid = currentFid + i;
+              if (fid > searchRange) break;
+              
               let fidHasMessages = false;
               
               try {
@@ -404,7 +514,7 @@ export class App implements MessageHandler {
                       const result = await checkFn();
                       if (result?.isOk() && result.value.messages.length > 0) {
                         fidHasMessages = true;
-                        log.info(`Found FID ${fid} in sparse area on shard ${shardIdx + 1}`);
+                        log.debug(`Found FID ${fid} in sparse area on shard ${shardIdx + 1}`);
                         break;
                       }
                     } catch (error) {
@@ -429,6 +539,11 @@ export class App implements MessageHandler {
             } else {
               emptyBatches = 0; // Reset counter if we found something
             }
+            
+            // Log progress during sparse area search
+            if (emptyBatches % 20 === 0) {
+              log.info(`Checked ${emptyBatches} empty batches in sparse area, continuing search... (Found ${allFids.size} FIDs total)`);
+            }
           }
           
           if (!foundAnyInBatch) {
@@ -437,8 +552,13 @@ export class App implements MessageHandler {
           }
         }
         
-        // Log progress every 1000 FIDs
-        if (allFids.size > 0 && allFids.size % 1000 === 0) {
+        // Log progress every 10000 FIDs checked (not found)
+        if (currentFid % 10000 === 0) {
+          log.info(`Checked up to FID ${currentFid}, discovered ${allFids.size} FIDs so far...`);
+        }
+        
+        // Log progress every 5000 FIDs found
+        if (allFids.size > 0 && allFids.size % 5000 === 0) {
           log.info(`Discovered ${allFids.size} FIDs so far...`);
         }
         
@@ -450,8 +570,10 @@ export class App implements MessageHandler {
     }
     
     const fidArray = Array.from(allFids).sort((a, b) => a - b);
-    log.info(`FID discovery complete. Found ${fidArray.length} total FIDs: [${Math.min(...fidArray)} - ${Math.max(...fidArray)}]`);
-    log.info(`Discovery captured ${((fidArray.length / (Math.max(...fidArray) - Math.min(...fidArray) + 1)) * 100).toFixed(1)}% of the FID range`);
+    log.info(`Manual FID discovery complete. Found ${fidArray.length} total FIDs: [${Math.min(...fidArray)} - ${Math.max(...fidArray)}]`);
+    if (fidArray.length > 0) {
+      log.info(`Discovery captured ${((fidArray.length / (Math.max(...fidArray) - Math.min(...fidArray) + 1)) * 100).toFixed(1)}% of the FID range`);
+    }
     log.info(`FIDs discovered from ${this.hubSubscribers.length} shards`);
     
     return fidArray;

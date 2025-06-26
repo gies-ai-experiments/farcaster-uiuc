@@ -90,7 +90,7 @@ services:
       - POSTGRES_SCHEMA=postgres
       - REDIS_URL=redis://redis:6379
       - COLORIZE=true
-      - CONCURRENCY=4
+      - CONCURRENCY=8
       - SHARDS=2
       - SHARD_NUMS=1,2
       - ENABLE_BACKFILL=true
@@ -114,7 +114,7 @@ services:
       - POSTGRES_USER=${DB_USER}
       - POSTGRES_PASSWORD=${DB_PASSWORD}
     volumes:
-      - /mnt/point/postgres-data:/var/lib/postgresql/data
+      - postgres-data:/var/lib/postgresql/data
     command: >
       postgres
       -c fsync=off
@@ -219,7 +219,9 @@ services:
   #   stdin_open: true
   #   tty: true
 
-volumes: {}
+volumes:
+  postgres-data:
+    driver: local
 
 networks:
   snapchain:

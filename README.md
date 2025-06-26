@@ -313,3 +313,55 @@ For production use:
 - check for image and video data on hub
 - mcp server (explore)
 - duck db (explore)
+
+# Farcaster Data Collection Pipeline
+
+This project syncs Farcaster data from Snapchain and stores it in PostgreSQL for analysis and visualization.
+
+## Recent Updates
+
+### PostgreSQL Local Storage Configuration
+- **Changed**: PostgreSQL now uses local Docker volumes instead of persistent storage
+- **Volume**: `postgres-data:/var/lib/postgresql/data` (local Docker volume)
+- **Benefit**: Better performance and eliminates dependency on external storage mounts
+
+### Shuttle FID Discovery Improvements
+- **Fixed**: FID discovery limit issue (was stopping at ~20k FIDs)
+- **Enhanced**: Now discovers all FIDs dynamically using:
+  1. **Native getFids API**: Efficient bulk retrieval from hub shards
+  2. **Dynamic range detection**: Automatically detects latest FID from hub and searches beyond it
+  3. **Improved manual discovery**: Fallback with larger batch sizes (500) and adaptive search strategy
+  4. **Smart sparse area handling**: Dynamic empty batch limits based on remaining search range
+  5. **Enhanced logging**: Progress tracking for large-scale discovery
+
+### Performance Optimizations
+- **Increased concurrency**: From 4 to 8 workers for parallel processing
+- **Larger page sizes**: 1000 FIDs per API call for efficiency
+- **Batch processing**: 500 FID batches for manual discovery
+- **Dynamic search ranges**: No hardcoded limits - adapts to network growth
+- **Memory management**: Reduced logging verbosity for large operations
+
+## Configuration Details
+
+### Environment Variables
+- `CONCURRENCY=8`: Number of parallel workers for reconciliation
+- `SHARDS=2` & `SHARD_NUMS=1,2`: Process both Farcaster shards
+
+### FID Discovery Process
+1. **Primary**: Uses hub's native `getFids` API for each shard
+2. **Dynamic Range**: Automatically detects latest FID and searches beyond it
+3. **Fallback**: Manual discovery checking message existence across all message types
+4. **Adaptive**: Adjusts search patience based on proximity to known latest FID
+5. **Reconciliation**: Processes discovered FIDs in batches of 10 for backfill
+
+## Services
+
+- **snap_read**: Farcaster Snapchain node for data access
+- **shuttle**: Official Farcaster data sync service (enhanced)
+- **postgres**: PostgreSQL database (local storage)
+- **redis**: Redis for shuttle job queue
+- **redash**: Data visualization and querying
+
+## Deployment
+
+All services are configured for the NCSA Radiant infrastructure. The shuttle service now dynamically discovers and syncs all Farcaster FIDs without any hardcoded limits, automatically adapting as the network grows.
