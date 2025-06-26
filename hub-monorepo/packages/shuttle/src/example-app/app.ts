@@ -256,37 +256,55 @@ export class App implements MessageHandler {
   }
 
   async reconcileFids(fids: number[]) {
-    const reconciler = new MessageReconciliation(
-      // biome-ignore lint/style/noNonNullAssertion: client is always initialized
-      this.hubSubscribers[0].hubClient!,
-      this.db,
-      log,
-      undefined,
-      USE_STREAMING_RPCS_FOR_BACKFILL,
-    );
-    for (const fid of fids) {
-      await reconciler.reconcileMessagesForFid(
-        fid,
-        async (message, missingInDb, prunedInDb, revokedInDb) => {
-          if (missingInDb) {
-            await HubEventProcessor.handleMissingMessage(this.db, message, this);
-          } else if (prunedInDb || revokedInDb) {
-            const messageDesc = prunedInDb ? "pruned" : revokedInDb ? "revoked" : "existing";
-            log.info(`Reconciled ${messageDesc} message ${bytesToHexString(message.hash)._unsafeUnwrap()}`);
-          }
-        },
-        async (message, missingInHub) => {
-          if (missingInHub) {
-            log.info(`Message ${bytesToHexString(message.hash)._unsafeUnwrap()} is missing in the hub`);
-          }
-        },
+    // Reconcile messages from ALL shards
+    for (let shardIdx = 0; shardIdx < this.hubSubscribers.length; shardIdx++) {
+      const hubClient = this.hubSubscribers[shardIdx].hubClient;
+      if (!hubClient) {
+        log.warn(`Hub client for shard ${shardIdx + 1} is not available, skipping reconciliation`);
+        continue;
+      }
+      
+      log.info(`Starting reconciliation for ${fids.length} FIDs on shard ${shardIdx + 1}`);
+      
+      const reconciler = new MessageReconciliation(
+        hubClient,
+        this.db,
+        log,
+        undefined,
+        USE_STREAMING_RPCS_FOR_BACKFILL,
       );
+      
+      for (const fid of fids) {
+        try {
+          await reconciler.reconcileMessagesForFid(
+            fid,
+            async (message, missingInDb, prunedInDb, revokedInDb) => {
+              if (missingInDb) {
+                await HubEventProcessor.handleMissingMessage(this.db, message, this);
+              } else if (prunedInDb || revokedInDb) {
+                const messageDesc = prunedInDb ? "pruned" : revokedInDb ? "revoked" : "existing";
+                log.info(`Reconciled ${messageDesc} message ${bytesToHexString(message.hash)._unsafeUnwrap()} from shard ${shardIdx + 1}`);
+              }
+            },
+            async (message, missingInHub) => {
+              if (missingInHub) {
+                log.info(`Message ${bytesToHexString(message.hash)._unsafeUnwrap()} is missing in shard ${shardIdx + 1} hub`);
+              }
+            },
+          );
+        } catch (error) {
+          log.error(`Failed to reconcile FID ${fid} on shard ${shardIdx + 1}:`, error);
+          // Continue with next FID
+        }
+      }
+      
+      log.info(`Completed reconciliation for shard ${shardIdx + 1}`);
     }
   }
 
   async discoverAllFids(): Promise<number[]> {
     log.info("Discovering all FIDs from hub...");
-    const allFids: number[] = [];
+    const allFids: Set<number> = new Set();
     let currentFid = 1;
     const batchSize = 100;
     
@@ -294,31 +312,64 @@ export class App implements MessageHandler {
       try {
         log.info(`Checking FIDs starting from ${currentFid}...`);
         
-        // Try to get cast messages for a batch of FIDs to see which ones exist
+        // Try to get any messages for a batch of FIDs to see which ones exist
         let foundAnyInBatch = false;
         const fidBatch: number[] = [];
         
         for (let i = 0; i < batchSize; i++) {
           const fid = currentFid + i;
+          let fidHasMessages = false;
+          
           try {
-            // Try to get any message for this FID to check if it exists
-            const result = await this.hubSubscribers[0].hubClient?.getAllCastMessagesByFid({
-              fid,
-              pageSize: 1
-            });
+            // Check ALL shards for this FID
+            for (let shardIdx = 0; shardIdx < this.hubSubscribers.length && !fidHasMessages; shardIdx++) {
+              const hubClient = this.hubSubscribers[shardIdx].hubClient;
+              log.debug(`Checking FID ${fid} on shard ${shardIdx + 1}`);
+              
+              // Check for different types of messages on this shard
+              const messageChecks = [
+                // Casts
+                () => hubClient?.getAllCastMessagesByFid({ fid, pageSize: 1 }),
+                // Reactions  
+                () => hubClient?.getAllReactionMessagesByFid({ fid, pageSize: 1 }),
+                // Links/Follows
+                () => hubClient?.getAllLinkMessagesByFid({ fid, pageSize: 1 }),
+                // Verifications
+                () => hubClient?.getAllVerificationMessagesByFid({ fid, pageSize: 1 }),
+                // User data (profiles)
+                () => hubClient?.getAllUserDataMessagesByFid({ fid, pageSize: 1 }),
+              ];
+              
+              // Check each message type until we find one on this shard
+              for (const checkFn of messageChecks) {
+                if (fidHasMessages) break;
+                
+                try {
+                  const result = await checkFn();
+                  if (result?.isOk() && result.value.messages.length > 0) {
+                    fidHasMessages = true;
+                    log.debug(`Found FID ${fid} with messages on shard ${shardIdx + 1}`);
+                    break;
+                  }
+                } catch (error) {
+                  // Continue to next message type
+                  log.debug(`FID ${fid} check failed for one message type on shard ${shardIdx + 1}: ${error}`);
+                }
+              }
+            }
             
-            if (result?.isOk() && result.value.messages.length > 0) {
+            if (fidHasMessages) {
               fidBatch.push(fid);
               foundAnyInBatch = true;
-              log.debug(`Found FID ${fid}`);
             }
+            
           } catch (error) {
             // FID doesn't exist or has no messages, continue
-            log.debug(`FID ${fid} has no cast messages`);
+            log.debug(`FID ${fid} has no messages on any shard`);
           }
         }
         
-        allFids.push(...fidBatch);
+        fidBatch.forEach(fid => allFids.add(fid));
         currentFid += batchSize;
         
         // If we didn't find any FIDs in this batch, try a few more batches before giving up
@@ -331,17 +382,41 @@ export class App implements MessageHandler {
             let foundInSkippedBatch = false;
             for (let i = 0; i < batchSize; i++) {
               const fid = currentFid + i;
+              let fidHasMessages = false;
+              
               try {
-                const result = await this.hubSubscribers[0].hubClient?.getAllCastMessagesByFid({
-                  fid,
-                  pageSize: 1
-                });
+                // Same comprehensive check for sparse areas - ALL shards
+                for (let shardIdx = 0; shardIdx < this.hubSubscribers.length && !fidHasMessages; shardIdx++) {
+                  const hubClient = this.hubSubscribers[shardIdx].hubClient;
+                  
+                  const messageChecks = [
+                    () => hubClient?.getAllCastMessagesByFid({ fid, pageSize: 1 }),
+                    () => hubClient?.getAllReactionMessagesByFid({ fid, pageSize: 1 }),
+                    () => hubClient?.getAllLinkMessagesByFid({ fid, pageSize: 1 }),
+                    () => hubClient?.getAllVerificationMessagesByFid({ fid, pageSize: 1 }),
+                    () => hubClient?.getAllUserDataMessagesByFid({ fid, pageSize: 1 }),
+                  ];
+                  
+                  for (const checkFn of messageChecks) {
+                    if (fidHasMessages) break;
+                    
+                    try {
+                      const result = await checkFn();
+                      if (result?.isOk() && result.value.messages.length > 0) {
+                        fidHasMessages = true;
+                        log.debug(`Found FID ${fid} in sparse area on shard ${shardIdx + 1}`);
+                        break;
+                      }
+                    } catch (error) {
+                      // Continue
+                    }
+                  }
+                }
                 
-                if (result?.isOk() && result.value.messages.length > 0) {
-                  allFids.push(fid);
+                if (fidHasMessages) {
+                  allFids.add(fid);
                   foundInSkippedBatch = true;
                   foundAnyInBatch = true;
-                  log.debug(`Found FID ${fid} in sparse area`);
                 }
               } catch (error) {
                 // Continue
@@ -363,8 +438,8 @@ export class App implements MessageHandler {
         }
         
         // Log progress every 1000 FIDs
-        if (allFids.length > 0 && allFids.length % 1000 === 0) {
-          log.info(`Discovered ${allFids.length} FIDs so far...`);
+        if (allFids.size > 0 && allFids.size % 1000 === 0) {
+          log.info(`Discovered ${allFids.size} FIDs so far...`);
         }
         
       } catch (error) {
@@ -374,8 +449,12 @@ export class App implements MessageHandler {
       }
     }
     
-    log.info(`FID discovery complete. Found ${allFids.length} total FIDs: [${Math.min(...allFids)} - ${Math.max(...allFids)}]`);
-    return allFids.sort((a, b) => a - b);
+    const fidArray = Array.from(allFids).sort((a, b) => a - b);
+    log.info(`FID discovery complete. Found ${fidArray.length} total FIDs: [${Math.min(...fidArray)} - ${Math.max(...fidArray)}]`);
+    log.info(`Discovery captured ${((fidArray.length / (Math.max(...fidArray) - Math.min(...fidArray) + 1)) * 100).toFixed(1)}% of the FID range`);
+    log.info(`FIDs discovered from ${this.hubSubscribers.length} shards`);
+    
+    return fidArray;
   }
 
   async backfillFids(fids: number[], backfillQueue: Queue) {

@@ -84,7 +84,7 @@ services:
     restart: unless-stopped
     environment:
       - LOG_LEVEL=info
-      - HUB_HOST=snap_read:3383
+      - HUB_HOST=localhost:3383
       - HUB_SSL=false
       - POSTGRES_URL=postgresql://${DB_USER}:${DB_PASSWORD}@postgres:5432/${DB_NAME}
       - POSTGRES_SCHEMA=postgres
@@ -97,12 +97,11 @@ services:
     volumes:
       - /mnt/point/shuttle-node_modules:/app/packages/shuttle/node_modules
     depends_on:
-      snap_read:
-        condition: service_healthy
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
+    network_mode: host
     networks:
       - snapchain
 
