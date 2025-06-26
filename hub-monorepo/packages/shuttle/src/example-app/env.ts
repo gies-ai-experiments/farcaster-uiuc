@@ -15,6 +15,13 @@ export const REDIS_URL = process.env["REDIS_URL"] || "redis://localhost:6379";
 export const TOTAL_SHARDS = parseInt(process.env["SHARDS"] || "0");
 export const SHARD_INDEX = parseInt(process.env["SHARD_NUM"] || "0");
 
+// New: Support for multiple shard indices as comma-separated values
+export const SHARD_INDICES_RAW = process.env["SHARD_NUMS"] || process.env["SHARD_NUM"] || "0";
+export const SHARD_INDICES = SHARD_INDICES_RAW.split(",").map(s => parseInt(s.trim())).filter(n => !isNaN(n));
+
+// Helper function to determine if we're using multiple shards
+export const USE_MULTIPLE_SHARDS = process.env["SHARD_NUMS"] !== undefined;
+
 export const BACKFILL_FIDS = process.env["FIDS"] || "";
 export const MAX_FID = process.env["MAX_FID"];
 

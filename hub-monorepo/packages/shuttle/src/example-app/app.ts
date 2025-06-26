@@ -42,6 +42,8 @@ import {
   REDIS_URL,
   SHARD_INDEX,
   TOTAL_SHARDS,
+  SHARD_INDICES,
+  USE_MULTIPLE_SHARDS,
   USE_STREAMING_RPCS_FOR_BACKFILL,
   SUBSCRIBE_RPC_TIMEOUT,
 } from "./env";
@@ -57,8 +59,8 @@ const hubId = "shuttle";
 export class App implements MessageHandler {
   private readonly db: DB;
   private readonly dbSchema: string;
-  private hubSubscriber: HubSubscriber;
-  private streamConsumer: HubEventStreamConsumer;
+  private hubSubscribers: HubSubscriber[];
+  private streamConsumers: HubEventStreamConsumer[];
   public redis: RedisClient;
   private readonly hubId;
 
@@ -66,15 +68,15 @@ export class App implements MessageHandler {
     db: DB,
     dbSchema: string,
     redis: RedisClient,
-    hubSubscriber: HubSubscriber,
-    streamConsumer: HubEventStreamConsumer,
+    hubSubscribers: HubSubscriber[],
+    streamConsumers: HubEventStreamConsumer[],
   ) {
     this.db = db;
     this.dbSchema = dbSchema;
     this.redis = redis;
-    this.hubSubscriber = hubSubscriber;
+    this.hubSubscribers = hubSubscribers;
     this.hubId = hubId;
-    this.streamConsumer = streamConsumer;
+    this.streamConsumers = streamConsumers;
   }
 
   static create(
@@ -89,24 +91,58 @@ export class App implements MessageHandler {
     const db = getDbClient(dbUrl, dbSchema);
     const hub = getHubClient(hubUrl, { ssl: hubSSL });
     const redis = RedisClient.create(redisUrl);
-    const eventStreamForWrite = new EventStreamConnection(redis.client);
-    const eventStreamForRead = new EventStreamConnection(redis.client);
-    const shardKey = totalShards === 0 ? "all" : `${shardIndex}`;
-    const hubSubscriber = new EventStreamHubSubscriber(
-      hubId,
-      hub,
-      eventStreamForWrite,
-      redis,
-      shardKey,
-      log,
-      null,
-      totalShards,
-      shardIndex,
-      SUBSCRIBE_RPC_TIMEOUT,
-    );
-    const streamConsumer = new HubEventStreamConsumer(hub, eventStreamForRead, shardKey);
 
-    return new App(db, dbSchema, redis, hubSubscriber, streamConsumer);
+    if (USE_MULTIPLE_SHARDS && SHARD_INDICES.length > 0) {
+      log.info(`Creating subscribers for multiple shards: ${SHARD_INDICES.join(", ")}`);
+      
+      const hubSubscribers: HubSubscriber[] = [];
+      const streamConsumers: HubEventStreamConsumer[] = [];
+
+      for (const currentShardIndex of SHARD_INDICES) {
+        const eventStreamForWrite = new EventStreamConnection(redis.client);
+        const eventStreamForRead = new EventStreamConnection(redis.client);
+        const shardKey = totalShards === 0 ? "all" : `${currentShardIndex}`;
+        
+        const hubSubscriber = new EventStreamHubSubscriber(
+          `${hubId}-shard-${currentShardIndex}`,
+          hub,
+          eventStreamForWrite,
+          redis,
+          shardKey,
+          log,
+          null,
+          totalShards,
+          currentShardIndex,
+          SUBSCRIBE_RPC_TIMEOUT,
+        );
+        
+        const streamConsumer = new HubEventStreamConsumer(hub, eventStreamForRead, shardKey);
+        
+        hubSubscribers.push(hubSubscriber);
+        streamConsumers.push(streamConsumer);
+      }
+
+      return new App(db, dbSchema, redis, hubSubscribers, streamConsumers);
+    } else {
+      const eventStreamForWrite = new EventStreamConnection(redis.client);
+      const eventStreamForRead = new EventStreamConnection(redis.client);
+      const shardKey = totalShards === 0 ? "all" : `${shardIndex}`;
+      const hubSubscriber = new EventStreamHubSubscriber(
+        hubId,
+        hub,
+        eventStreamForWrite,
+        redis,
+        shardKey,
+        log,
+        null,
+        totalShards,
+        shardIndex,
+        SUBSCRIBE_RPC_TIMEOUT,
+      );
+      const streamConsumer = new HubEventStreamConsumer(hub, eventStreamForRead, shardKey);
+
+      return new App(db, dbSchema, redis, [hubSubscriber], [streamConsumer]);
+    }
   }
 
   async onHubEvent(event: HubEvent, txn: DB): Promise<boolean> {
@@ -203,23 +239,27 @@ export class App implements MessageHandler {
     await this.ensureMigrations();
     // Hub subscriber listens to events from the hub and writes them to a redis stream. This allows for scaling by
     // splitting events to multiple streams
-    await this.hubSubscriber.start();
+    for (const hubSubscriber of this.hubSubscribers) {
+      await hubSubscriber.start();
+    }
 
     // Sleep 10 seconds to give the subscriber a chance to create the stream for the first time.
     await new Promise((resolve) => setTimeout(resolve, 10_000));
 
     log.info("Starting stream consumer");
     // Stream consumer reads from the redis stream and inserts them into postgres
-    await this.streamConsumer.start(async (event) => {
-      await this.processHubEvent(event);
-      return ok({ skipped: false });
-    });
+    for (const streamConsumer of this.streamConsumers) {
+      await streamConsumer.start(async (event) => {
+        await this.processHubEvent(event);
+        return ok({ skipped: false });
+      });
+    }
   }
 
   async reconcileFids(fids: number[]) {
     const reconciler = new MessageReconciliation(
       // biome-ignore lint/style/noNonNullAssertion: client is always initialized
-      this.hubSubscriber.hubClient!,
+      this.hubSubscribers[0].hubClient!,
       this.db,
       log,
       undefined,
@@ -250,7 +290,7 @@ export class App implements MessageHandler {
     if (fids.length === 0) {
       let maxFid = MAX_FID ? parseInt(MAX_FID) : undefined;
       if (!maxFid) {
-        const getInfoResult = await this.hubSubscriber.hubClient?.getInfo(HubInfoRequest.create({}));
+        const getInfoResult = await this.hubSubscribers[0].hubClient?.getInfo(HubInfoRequest.create({}));
         if (getInfoResult?.isErr()) {
           log.error("Failed to get max fid", getInfoResult.error);
           throw getInfoResult.error;
@@ -290,7 +330,9 @@ export class App implements MessageHandler {
   }
 
   async stop() {
-    this.hubSubscriber.stop();
+    for (const hubSubscriber of this.hubSubscribers) {
+      hubSubscriber.stop();
+    }
     const lastEventId = await this.redis.getLastProcessedEvent(this.hubId);
     log.info(`Stopped at eventId: ${lastEventId}`);
   }
