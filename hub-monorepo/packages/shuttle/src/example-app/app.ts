@@ -324,7 +324,7 @@ export class App implements MessageHandler {
             // Check ALL shards for this FID
             for (let shardIdx = 0; shardIdx < this.hubSubscribers.length && !fidHasMessages; shardIdx++) {
               const hubClient = this.hubSubscribers[shardIdx].hubClient;
-              log.debug(`Checking FID ${fid} on shard ${shardIdx + 1}`);
+              log.info(`Checking FID ${fid} on shard ${shardIdx + 1}`);
               
               // Check for different types of messages on this shard
               const messageChecks = [
@@ -348,7 +348,7 @@ export class App implements MessageHandler {
                   const result = await checkFn();
                   if (result?.isOk() && result.value.messages.length > 0) {
                     fidHasMessages = true;
-                    log.debug(`Found FID ${fid} with messages on shard ${shardIdx + 1}`);
+                    log.info(`Found FID ${fid} with messages on shard ${shardIdx + 1}`);
                     break;
                   }
                 } catch (error) {
@@ -404,7 +404,7 @@ export class App implements MessageHandler {
                       const result = await checkFn();
                       if (result?.isOk() && result.value.messages.length > 0) {
                         fidHasMessages = true;
-                        log.debug(`Found FID ${fid} in sparse area on shard ${shardIdx + 1}`);
+                        log.info(`Found FID ${fid} in sparse area on shard ${shardIdx + 1}`);
                         break;
                       }
                     } catch (error) {
