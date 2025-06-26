@@ -93,6 +93,7 @@ services:
       - CONCURRENCY=4
       - SHARDS=2
       - SHARD_NUMS=1,2
+      - ENABLE_BACKFILL=true
     volumes:
       - /mnt/point/shuttle-node_modules:/app/packages/shuttle/node_modules
     depends_on:

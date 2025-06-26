@@ -1,33 +1,41 @@
-FROM node:20-alpine
+# Use a multi-stage build for the shuttle
+FROM node:20-alpine AS builder
 
-WORKDIR /app
-
-# Install git and build dependencies
+# Install dependencies for building
 RUN apk add --no-cache git python3 make g++
 
-# Copy the entire hub-monorepo directory
-COPY hub-monorepo/ ./
+# Copy the hub-monorepo source
+COPY hub-monorepo /app
 
-# Verify files are copied and show directory structure
-RUN ls -la && echo "--- Packages directory ---" && ls -la packages/
+# Set working directory
+WORKDIR /app
 
-# Install root dependencies
-RUN npm install --legacy-peer-deps
+# Install dependencies and build packages in correct order
+RUN npm install
 
-# Build packages in dependency order
+# Build core package first
 WORKDIR /app/packages/core
-RUN npm install && npm run build
+RUN npm run build
 
-# Build hub-nodejs package (depends on core)
+# Build hub-nodejs package  
 WORKDIR /app/packages/hub-nodejs
-RUN npm install && npm run build
+RUN npm run build
 
-# Build shuttle package (depends on hub-nodejs and core)
+# Build shuttle package
 WORKDIR /app/packages/shuttle
-RUN npm install && npm run build
+RUN npm run build
 
-# Install tsx globally for running TypeScript
+# Production stage
+FROM node:20-alpine
+
+# Install tsx for TypeScript execution
 RUN npm install -g tsx
 
-# Start with just the main shuttle process to avoid database connection race conditions
-CMD ["tsx", "src/example-app/app.ts", "start"] 
+# Copy built application
+COPY --from=builder /app /app
+
+# Set working directory to shuttle
+WORKDIR /app/packages/shuttle
+
+# Start with the new full-sync command that does backfill then real-time sync
+CMD ["tsx", "src/example-app/app.ts", "full-sync"] 

@@ -347,6 +347,56 @@ if (import.meta.url.endsWith(url.pathToFileURL(process.argv[1] || "").toString()
     await app.start();
   }
 
+  async function fullSync() {
+    log.info(`Creating app connecting to: ${POSTGRES_URL}, ${REDIS_URL}, ${HUB_HOST}`);
+    const app = App.create(POSTGRES_URL, POSTGRES_SCHEMA, REDIS_URL, HUB_HOST, TOTAL_SHARDS, SHARD_INDEX, HUB_SSL);
+    
+    // First, run backfill if requested
+    const shouldBackfill = process.env["ENABLE_BACKFILL"] === "true";
+    if (shouldBackfill) {
+      log.info("Starting backfill phase...");
+      const fids = BACKFILL_FIDS ? BACKFILL_FIDS.split(",").map((fid) => parseInt(fid)) : [];
+      log.info(`Backfilling fids: ${fids.length > 0 ? fids : "all FIDs up to MAX_FID"}`);
+      
+      const backfillQueue = getQueue(app.redis.client);
+      await app.backfillFids(fids, backfillQueue);
+
+      // Start and run the worker to process backfill jobs
+      log.info("Processing backfill jobs...");
+      const worker = getWorker(app, app.redis.client, log, CONCURRENCY);
+      
+      // Run worker until all jobs are completed
+      await new Promise<void>((resolve) => {
+        let completionMarkerSeen = false;
+        
+        worker.on('completed', (job) => {
+          if (job.name === 'completionMarker') {
+            log.info("Backfill completion marker reached");
+            completionMarkerSeen = true;
+          }
+        });
+        
+        worker.on('drained', () => {
+          if (completionMarkerSeen) {
+            log.info("All backfill jobs completed");
+            worker.close();
+            resolve();
+          }
+        });
+        
+        worker.run();
+      });
+      
+      log.info("Backfill phase completed, starting real-time sync...");
+    } else {
+      log.info("Backfill disabled, starting real-time sync only...");
+    }
+    
+    // Now start real-time sync
+    log.info("Starting real-time shuttle sync");
+    await app.start();
+  }
+
   async function backfill() {
     log.info(`Creating app connecting to: ${POSTGRES_URL}, ${REDIS_URL}, ${HUB_HOST}`);
     const app = App.create(POSTGRES_URL, POSTGRES_SCHEMA, REDIS_URL, HUB_HOST, TOTAL_SHARDS, SHARD_INDEX, HUB_SSL);
@@ -386,7 +436,8 @@ if (import.meta.url.endsWith(url.pathToFileURL(process.argv[1] || "").toString()
     .description("Synchronizes a Farcaster Hub with a Postgres database")
     .version(JSON.parse(readFileSync("./package.json").toString()).version);
 
-  program.command("start").description("Starts the shuttle").action(start);
+  program.command("start").description("Starts the shuttle (real-time only)").action(start);
+  program.command("full-sync").description("Runs backfill then starts real-time sync").action(fullSync);
   program.command("backfill").description("Queue up backfill for the worker").action(backfill);
   program.command("worker").description("Starts the backfill worker").action(worker);
 
