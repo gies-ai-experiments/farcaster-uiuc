@@ -84,7 +84,7 @@ services:
     restart: unless-stopped
     environment:
       - LOG_LEVEL=info
-      - HUB_HOST=localhost:3383
+      - HUB_HOST=snap_read:3383
       - HUB_SSL=false
       - POSTGRES_URL=postgresql://${DB_USER}:${DB_PASSWORD}@postgres:5432/${DB_NAME}
       - POSTGRES_SCHEMA=postgres
@@ -101,7 +101,6 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-    network_mode: host
     networks:
       - snapchain
 
