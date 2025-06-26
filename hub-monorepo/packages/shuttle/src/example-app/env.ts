@@ -23,7 +23,6 @@ export const SHARD_INDICES = SHARD_INDICES_RAW.split(",").map(s => parseInt(s.tr
 export const USE_MULTIPLE_SHARDS = process.env["SHARD_NUMS"] !== undefined;
 
 export const BACKFILL_FIDS = process.env["FIDS"] || "";
-export const MAX_FID = process.env["MAX_FID"];
 
 export const STATSD_HOST = process.env["STATSD_HOST"];
 export const STATSD_METRICS_PREFIX = process.env["STATSD_METRICS_PREFIX"] || "shuttle.";

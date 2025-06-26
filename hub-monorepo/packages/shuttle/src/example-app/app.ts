@@ -36,17 +36,16 @@ import {
   CONCURRENCY,
   HUB_HOST,
   HUB_SSL,
-  MAX_FID,
-  POSTGRES_URL,
   POSTGRES_SCHEMA,
+  POSTGRES_URL,
   REDIS_URL,
-  SHARD_INDEX,
-  TOTAL_SHARDS,
   SHARD_INDICES,
+  SHARD_INDEX,
+  SUBSCRIBE_RPC_TIMEOUT,
+  TOTAL_SHARDS,
   USE_MULTIPLE_SHARDS,
   USE_STREAMING_RPCS_FOR_BACKFILL,
-  SUBSCRIBE_RPC_TIMEOUT,
-} from "./env";
+} from "./env.js";
 import * as process from "node:process";
 import url from "node:url";
 import { ok, Result } from "neverthrow";
@@ -285,34 +284,131 @@ export class App implements MessageHandler {
     }
   }
 
+  async discoverAllFids(): Promise<number[]> {
+    log.info("Discovering all FIDs from hub...");
+    const allFids: number[] = [];
+    let currentFid = 1;
+    const batchSize = 100;
+    
+    while (true) {
+      try {
+        log.info(`Checking FIDs starting from ${currentFid}...`);
+        
+        // Try to get cast messages for a batch of FIDs to see which ones exist
+        let foundAnyInBatch = false;
+        const fidBatch: number[] = [];
+        
+        for (let i = 0; i < batchSize; i++) {
+          const fid = currentFid + i;
+          try {
+            // Try to get any message for this FID to check if it exists
+            const result = await this.hubSubscribers[0].hubClient?.getAllCastMessagesByFid({
+              fid,
+              pageSize: 1
+            });
+            
+            if (result?.isOk() && result.value.messages.length > 0) {
+              fidBatch.push(fid);
+              foundAnyInBatch = true;
+              log.debug(`Found FID ${fid}`);
+            }
+          } catch (error) {
+            // FID doesn't exist or has no messages, continue
+            log.debug(`FID ${fid} has no cast messages`);
+          }
+        }
+        
+        allFids.push(...fidBatch);
+        currentFid += batchSize;
+        
+        // If we didn't find any FIDs in this batch, try a few more batches before giving up
+        if (!foundAnyInBatch) {
+          log.info(`No FIDs found in batch starting at ${currentFid - batchSize}, checking a few more batches...`);
+          let emptyBatches = 1;
+          const maxEmptyBatches = 10; // Check 10 empty batches before stopping
+          
+          while (emptyBatches < maxEmptyBatches) {
+            let foundInSkippedBatch = false;
+            for (let i = 0; i < batchSize; i++) {
+              const fid = currentFid + i;
+              try {
+                const result = await this.hubSubscribers[0].hubClient?.getAllCastMessagesByFid({
+                  fid,
+                  pageSize: 1
+                });
+                
+                if (result?.isOk() && result.value.messages.length > 0) {
+                  allFids.push(fid);
+                  foundInSkippedBatch = true;
+                  foundAnyInBatch = true;
+                  log.debug(`Found FID ${fid} in sparse area`);
+                }
+              } catch (error) {
+                // Continue
+              }
+            }
+            
+            currentFid += batchSize;
+            if (!foundInSkippedBatch) {
+              emptyBatches++;
+            } else {
+              emptyBatches = 0; // Reset counter if we found something
+            }
+          }
+          
+          if (!foundAnyInBatch) {
+            log.info(`No more FIDs found after checking ${maxEmptyBatches} empty batches. Discovery complete.`);
+            break;
+          }
+        }
+        
+        // Log progress every 1000 FIDs
+        if (allFids.length > 0 && allFids.length % 1000 === 0) {
+          log.info(`Discovered ${allFids.length} FIDs so far...`);
+        }
+        
+      } catch (error) {
+        log.error(`Error during FID discovery at FID ${currentFid}:`, error);
+        // Continue with next batch
+        currentFid += batchSize;
+      }
+    }
+    
+    log.info(`FID discovery complete. Found ${allFids.length} total FIDs: [${Math.min(...allFids)} - ${Math.max(...allFids)}]`);
+    return allFids.sort((a, b) => a - b);
+  }
+
   async backfillFids(fids: number[], backfillQueue: Queue) {
     const startedAt = Date.now();
     if (fids.length === 0) {
-      let maxFid = MAX_FID ? parseInt(MAX_FID) : undefined;
-      if (!maxFid) {
-        const getInfoResult = await this.hubSubscribers[0].hubClient?.getInfo({});
-        if (getInfoResult?.isErr()) {
-          log.error("Failed to get max fid", getInfoResult.error);
-          throw getInfoResult.error;
-        } else {
-          maxFid = getInfoResult?._unsafeUnwrap()?.dbStats?.numFidEvents;
-          if (!maxFid) {
-            log.error("Failed to get max fid");
-            throw new Error("Failed to get max fid");
-          }
+      log.info("No specific FIDs provided, discovering all FIDs from hub...");
+      
+      try {
+        const discoveredFids = await this.discoverAllFids();
+        
+        if (discoveredFids.length === 0) {
+          log.warn("No FIDs discovered from hub. Nothing to backfill.");
+          return;
         }
-      }
-      log.info(`Queuing up fids upto: ${maxFid}`);
-      // create an array of arrays in batches of 100 upto maxFid
-      const batchSize = 10;
-      const fids = Array.from({ length: Math.ceil(maxFid / batchSize) }, (_, i) => i * batchSize).map((fid) => fid + 1);
-      for (const start of fids) {
-        const subset = Array.from({ length: batchSize }, (_, i) => start + i);
-        await backfillQueue.add("reconcile", { fids: subset });
+        
+        log.info(`Queuing up ${discoveredFids.length} discovered FIDs for backfill`);
+        
+        // Create batches of discovered FIDs
+        const batchSize = 10;
+        for (let i = 0; i < discoveredFids.length; i += batchSize) {
+          const fidBatch = discoveredFids.slice(i, i + batchSize);
+          await backfillQueue.add("reconcile", { fids: fidBatch });
+        }
+        
+      } catch (error) {
+        log.error("Failed to discover FIDs from hub:", error);
+        throw new Error("Failed to discover FIDs for backfill");
       }
     } else {
+      log.info(`Queuing up ${fids.length} specified FIDs for backfill`);
       await backfillQueue.add("reconcile", { fids });
     }
+    
     await backfillQueue.add("completionMarker", { startedAt });
     log.info("Backfill jobs queued");
   }
@@ -356,7 +452,7 @@ if (import.meta.url.endsWith(url.pathToFileURL(process.argv[1] || "").toString()
     if (shouldBackfill) {
       log.info("Starting backfill phase...");
       const fids = BACKFILL_FIDS ? BACKFILL_FIDS.split(",").map((fid) => parseInt(fid)) : [];
-      log.info(`Backfilling fids: ${fids.length > 0 ? fids : "all FIDs up to MAX_FID"}`);
+      log.info(`Backfilling fids: ${fids.length > 0 ? fids : "all FIDs discovered from hub"}`);
       
       const backfillQueue = getQueue(app.redis.client);
       await app.backfillFids(fids, backfillQueue);
