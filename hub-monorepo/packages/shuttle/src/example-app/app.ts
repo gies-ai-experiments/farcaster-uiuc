@@ -290,7 +290,7 @@ export class App implements MessageHandler {
     if (fids.length === 0) {
       let maxFid = MAX_FID ? parseInt(MAX_FID) : undefined;
       if (!maxFid) {
-        const getInfoResult = await this.hubSubscribers[0].hubClient?.getInfo(HubInfoRequest.create({}));
+        const getInfoResult = await this.hubSubscribers[0].hubClient?.getInfo({});
         if (getInfoResult?.isErr()) {
           log.error("Failed to get max fid", getInfoResult.error);
           throw getInfoResult.error;
