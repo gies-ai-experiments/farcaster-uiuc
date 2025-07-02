@@ -139,7 +139,7 @@ services:
     restart: unless-stopped
     command: --save "" --loglevel warning --maxmemory-policy noeviction
     volumes:
-      - /mnt/point/redis-data:/data
+      - ./data/redis:/data
     ports:
       - '6379:6379'
     healthcheck:
